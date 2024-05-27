@@ -1,4 +1,5 @@
 import os
+import shutil
 
 from ..lib.audio import audio_to_bytes, bytes_to_audio, load_input_audio, save_input_audio
 
@@ -57,7 +58,8 @@ class RVCNode:
 
     def convert(self, audio, model, hubert_model, pitch_extraction_params, format, use_cache=True, **kwargs):
         
-        cache_name = os.path.join(BASE_CACHE_DIR,"rvc",f"{get_hash(audio(), model, *pitch_extraction_params.items())}.{format}")
+        widgetId = get_hash(audio(), model, *pitch_extraction_params.items())
+        cache_name = os.path.join(BASE_CACHE_DIR,"rvc",f"{widgetId}.{format}")
 
         if use_cache and os.path.isfile(cache_name): output_audio = load_input_audio(cache_name)
         else:
@@ -65,7 +67,12 @@ class RVCNode:
             output_audio = vc_single(hubert_model=hubert_model(),input_audio=input_audio,**model(),**pitch_extraction_params,**kwargs)
             print(save_input_audio(cache_name, output_audio))
         
-        return (lambda:audio_to_bytes(*output_audio),)
+        tempdir = os.path.join(temp_path,"preview")
+        os.makedirs(tempdir, exist_ok=True)
+        audio_name = os.path.basename(cache_name)
+        preview_file = os.path.join(tempdir,audio_name)
+        if not os.path.isfile(preview_file): shutil.copyfile(cache_name,preview_file)
+        return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda:audio_to_bytes(*output_audio),)}
 
 
     @classmethod

@@ -10,7 +10,7 @@ from ..lib.utils import gc_collect, get_hash
 from .settings.downloader import RVC_DOWNLOAD_LINK, download_file
 from ..lib import BASE_MODELS_DIR
 import numpy as np
-from ..lib.audio import MAX_INT16, audio_to_bytes, bytes_to_audio, merge_audio, remix_audio
+from ..lib.audio import MAX_INT16, audio_to_bytes, bytes_to_audio, load_input_audio, merge_audio, remix_audio, save_input_audio
 
 CATEGORY = "🌺RVC-Studio/utils"
 temp_path = folder_paths.get_temp_directory()
@@ -357,10 +357,18 @@ class MergeAudioNode:
 
     def merge(self, audio1, audio2, sr, merge_type, normalize):
         if sr=="None": sr=None
-        input_audio1 = bytes_to_audio(audio1())
-        input_audio2 = bytes_to_audio(audio2())
-        merged_audio = merge_audio(input_audio1,input_audio2,sr=sr,to_int16=True,norm=normalize,merge_type=merge_type)
-        return (lambda: audio_to_bytes(*merged_audio),)
+
+        widgetId = get_hash(audio1(),audio2(),sr,merge_type,normalize)
+        audio_path = os.path.join(temp_path,"preview",f"{widgetId}.flac")
+
+        if os.path.isfile(audio_path): merged_audio = load_input_audio(audio_path, sr, norm=normalize)
+        else:
+            input_audio1 = bytes_to_audio(audio1())
+            input_audio2 = bytes_to_audio(audio2())
+            merged_audio = merge_audio(input_audio1,input_audio2,sr=sr,to_int16=True,norm=normalize,merge_type=merge_type)
+            print(save_input_audio(audio_path,merged_audio))
+        audio_name = os.path.basename(audio_path)
+        return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda: audio_to_bytes(*merged_audio),)}
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):

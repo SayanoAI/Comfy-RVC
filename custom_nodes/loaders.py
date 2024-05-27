@@ -241,11 +241,12 @@ class LoadAudio:
 
     def load_audio(self, audio, sr):
         audio_path = folder_paths.get_annotated_filepath(audio)
-        print(f"{audio_path=} {audio=}")
+        widgetId = get_hash(audio_path)
         audio_name = os.path.basename(audio).split(".")[0]
         sr = None if sr=="None" else int(sr)
         audio = load_input_audio(audio_path,sr=sr)
-        return (audio_name,lambda:audio_to_bytes(*audio))
+        return {"ui": {"preview": [{"filename": audio_name, "type": "input", "widgetId": widgetId}]}, "result": (audio_name, lambda:audio_to_bytes(*audio))}
+        # return (audio_name,lambda:audio_to_bytes(*audio))
 
     @classmethod
     def IS_CHANGED(cls, audio):

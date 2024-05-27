@@ -84,4 +84,4 @@ class UVR5Node:
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
         print(f"{args=} {kwargs=}")
-        return get_hash(*args, *kwargs.items())
+        return get_hash(args,kwargs)
