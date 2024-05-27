@@ -20,7 +20,8 @@ class UVR5Node:
     @classmethod
     def INPUT_TYPES(cls):
 
-        model_list = MDX_MODELS + VR_MODELS + KARAFAN_MODELS + get_filenames(root=BASE_MODELS_DIR,format_func=os.path.basename)
+        model_list = MDX_MODELS + VR_MODELS + KARAFAN_MODELS + get_filenames(root=BASE_MODELS_DIR,format_func=lambda x: f"{os.path.basename(os.path.dirname(x))}/{os.path.basename(x)}",name_filters=["UVR","MDXNET","karafan"])
+        model_list = list(set(model_list)) # dedupe
 
         return {
             "required": {

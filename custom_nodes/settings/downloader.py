@@ -10,7 +10,7 @@ from ...lib import BASE_CACHE_DIR, BASE_MODELS_DIR
 RVC_DOWNLOAD_LINK = 'https://huggingface.co/datasets/SayanoAI/RVC-Studio/resolve/main/'
 MDX_MODELS = ["MDXNET/UVR-MDX-NET-vocal_FT.onnx"]
 KARAFAN_MODELS = ["karafan/MDX23C-8KFFT-InstVoc_HQ.ckpt"]
-VR_MODELS = ["UVR/UVR-DeEcho-DeReverb.pth","UVR/HP5-vocals+instrumentals.pth"]
+VR_MODELS = ["UVR/UVR-DeEcho-DeReverb.pth","UVR/HP5-vocals+instrumentals.pth","UVR/5_HP-Karaoke-UVR.pth"]
 RVC_MODELS = [
     "RVC/Claire.pth",
     "RVC/Sayano.pth",
