@@ -19,9 +19,9 @@ CWD = get_cwd()
 def get_hash(*args):
     return hashlib.md5("".join(str(data) for data in args).encode()).hexdigest()
 
-def get_file_hash(fname,size=10*1024**2):
-    if hasattr(fname,"read"):
-        with open(fname,"rb") as f: return hashlib.md5(f.read(-size)).hexdigest()
+def get_file_hash(fname: str, size=10*1024**2):
+    with open(fname,"rb") as f:
+        return hashlib.md5(f.read(size)).hexdigest()
 
 def get_subprocesses(pid = os.getpid()):
     # Get a list of all subprocesses started by the current process
@@ -45,7 +45,7 @@ def get_filenames(root=CWD,folder="**",exts=["*"],name_filters=[""],filter_func=
     fnames = []
     for ext in exts:
         fnames.extend(glob.glob(f"{root}/{folder}/*.{ext}",recursive=True))
-    return sorted([format_func(ele) for ele in fnames if filter_func([nf.lower() in os.path.basename(ele).lower() for nf in name_filters])])
+    return sorted([format_func(ele) for ele in fnames if filter_func([nf.lower() in ele.lower() for nf in name_filters])])
 
 def get_index(arr,value):
     if arr is not None:

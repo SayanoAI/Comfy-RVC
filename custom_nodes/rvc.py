@@ -10,6 +10,7 @@ from ..lib import BASE_CACHE_DIR, BASE_MODELS_DIR
 
 input_path = folder_paths.get_input_directory()
 temp_path = folder_paths.get_temp_directory()
+cache_dir = os.path.join(BASE_CACHE_DIR,"rvc")
 # output_path = folder_paths.get_output_directory()
 # base_path = os.path.dirname(input_path)
 node_path = os.path.join(BASE_MODELS_DIR,"custom_nodes/ComfyUI-UVR5")
@@ -39,11 +40,11 @@ class RVCNode:
                     "step": 1, #Slider's step
                     "display": "slider"
                 }),
+            },
+            "optional": {
                 "format":(["wav", "flac", "mp3"],{
                     "default": "flac"
                 }),
-            },
-            "optional": {
                 "use_cache": ("BOOLEAN",{"default": True})
             }
         }
@@ -56,15 +57,15 @@ class RVCNode:
 
     CATEGORY = "🌺RVC-Studio/rvc"
 
-    def convert(self, audio, model, hubert_model, pitch_extraction_params, format, use_cache=True, **kwargs):
+    def convert(self, audio, model, hubert_model, pitch_extraction_params, f0_up_key, format="flac", use_cache=True):
         
-        widgetId = get_hash(audio(), model, *pitch_extraction_params.items())
+        widgetId = get_hash(audio(), model, f0_up_key, *pitch_extraction_params.items())
         cache_name = os.path.join(BASE_CACHE_DIR,"rvc",f"{widgetId}.{format}")
 
         if use_cache and os.path.isfile(cache_name): output_audio = load_input_audio(cache_name)
         else:
             input_audio = bytes_to_audio(audio())
-            output_audio = vc_single(hubert_model=hubert_model(),input_audio=input_audio,**model(),**pitch_extraction_params,**kwargs)
+            output_audio = vc_single(hubert_model=hubert_model(),input_audio=input_audio,f0_up_key=f0_up_key,**model(),**pitch_extraction_params)
             print(save_input_audio(cache_name, output_audio))
         
         tempdir = os.path.join(temp_path,"preview")

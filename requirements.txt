@@ -5,10 +5,9 @@ faiss-cpu
 ffmpeg-python
 tqdm
 audioread
+audio-separator[gpu]
 onnxruntime-gpu
-onnxruntime
 ffmpy
-accelerate
 samplerate
 pyaudio
 spacy

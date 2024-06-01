@@ -246,7 +246,6 @@ class LoadAudio:
         sr = None if sr=="None" else int(sr)
         audio = load_input_audio(audio_path,sr=sr)
         return {"ui": {"preview": [{"filename": audio_name, "type": "input", "widgetId": widgetId}]}, "result": (audio_name, lambda:audio_to_bytes(*audio))}
-        # return (audio_name,lambda:audio_to_bytes(*audio))
 
     @classmethod
     def IS_CHANGED(cls, audio):
