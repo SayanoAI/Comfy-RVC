@@ -1,8 +1,7 @@
-librosa
+librosa~=0.10.2
+numpy
 fairseq==0.12.2
-faiss-cpu==1.7.3
-pydub>=0.25.1
-pytube
+faiss-cpu
 ffmpeg-python
 tqdm
 audioread
@@ -10,7 +9,6 @@ onnxruntime-gpu
 onnxruntime
 ffmpy
 accelerate
-pytube
 samplerate
 pyaudio
 spacy

@@ -172,39 +172,6 @@
       ]
     },
     {
-      "id": 5,
-      "type": "LoadHubertModel",
-      "pos": [
-        306,
-        51
-      ],
-      "size": {
-        "0": 315,
-        "1": 58
-      },
-      "flags": {
-        "collapsed": true
-      },
-      "order": 0,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "hubert_model",
-          "type": "HUBERT_MODEL",
-          "links": [
-            58
-          ],
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadHubertModel"
-      },
-      "widgets_values": [
-        "hubert_base.pt"
-      ]
-    },
-    {
       "id": 6,
       "type": "LoadPitchExtractionParams",
       "pos": [
@@ -216,7 +183,7 @@
         "1": 178
       },
       "flags": {},
-      "order": 1,
+      "order": 0,
       "mode": 0,
       "outputs": [
         {
@@ -238,46 +205,6 @@
         0,
         0.25,
         0.25
-      ]
-    },
-    {
-      "id": 4,
-      "type": "LoadRVCModelNode",
-      "pos": [
-        649,
-        -136
-      ],
-      "size": {
-        "0": 315,
-        "1": 78
-      },
-      "flags": {},
-      "order": 2,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "model",
-          "type": "RVC_MODEL",
-          "links": [
-            57
-          ],
-          "shape": 3
-        },
-        {
-          "name": "model_name",
-          "type": "STRING",
-          "links": [
-            40
-          ],
-          "shape": 3,
-          "slot_index": 1
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadRVCModelNode"
-      },
-      "widgets_values": [
-        "RVC/loss27_Sayano_e151.pth"
       ]
     },
     {
@@ -328,6 +255,11 @@
           "hidden": false,
           "paused": false,
           "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
         }
       ]
     },
@@ -338,10 +270,10 @@
         676,
         -528
       ],
-      "size": {
-        "0": 315,
-        "1": 126
-      },
+      "size": [
+        315,
+        126
+      ],
       "flags": {},
       "order": 9,
       "mode": 0,
@@ -374,7 +306,12 @@
       "widgets_values": [
         "None",
         "mean",
-        true
+        true,
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
       ]
     },
     {
@@ -384,10 +321,10 @@
         643,
         5
       ],
-      "size": {
-        "0": 309.34271240234375,
-        "1": 166
-      },
+      "size": [
+        309.34271240234375,
+        166
+      ],
       "flags": {},
       "order": 11,
       "mode": 0,
@@ -430,7 +367,12 @@
       "widgets_values": [
         0,
         "flac",
-        true
+        true,
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
       ]
     },
     {
@@ -440,10 +382,10 @@
         1154,
         -367
       ],
-      "size": {
-        "0": 315,
-        "1": 126
-      },
+      "size": [
+        315,
+        126
+      ],
       "flags": {},
       "order": 12,
       "mode": 0,
@@ -476,7 +418,12 @@
       "widgets_values": [
         "None",
         "mean",
-        true
+        true,
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
       ]
     },
     {
@@ -540,10 +487,10 @@
         1514,
         -358
       ],
-      "size": {
-        "0": 315,
-        "1": 150
-      },
+      "size": [
+        315,
+        150
+      ],
       "flags": {},
       "order": 13,
       "mode": 0,
@@ -585,50 +532,12 @@
         "flac",
         2,
         true,
-        true
-      ]
-    },
-    {
-      "id": 38,
-      "type": "LoadAudio",
-      "pos": [
-        -171,
-        -739
-      ],
-      "size": [
-        309.89001187135455,
-        126
-      ],
-      "flags": {},
-      "order": 3,
-      "mode": 0,
-      "outputs": [
+        true,
         {
-          "name": "audio_name",
-          "type": "STRING",
-          "links": [
-            62
-          ],
-          "shape": 3,
-          "slot_index": 0
-        },
-        {
-          "name": "vhs_audio",
-          "type": "VHS_AUDIO",
-          "links": [
-            61
-          ],
-          "shape": 3,
-          "slot_index": 1
+          "hidden": false,
+          "paused": false,
+          "params": {}
         }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadAudio"
-      },
-      "widgets_values": [
-        "already-enough.mp3",
-        "None",
-        "image"
       ]
     },
     {
@@ -685,6 +594,122 @@
         10,
         "flac",
         true
+      ]
+    },
+    {
+      "id": 5,
+      "type": "LoadHubertModel",
+      "pos": [
+        306,
+        51
+      ],
+      "size": {
+        "0": 315,
+        "1": 58
+      },
+      "flags": {
+        "collapsed": true
+      },
+      "order": 1,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "hubert_model",
+          "type": "HUBERT_MODEL",
+          "links": [
+            58
+          ],
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadHubertModel"
+      },
+      "widgets_values": [
+        "hubert_base.pt"
+      ]
+    },
+    {
+      "id": 4,
+      "type": "LoadRVCModelNode",
+      "pos": [
+        649,
+        -136
+      ],
+      "size": {
+        "0": 315,
+        "1": 78
+      },
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "model",
+          "type": "RVC_MODEL",
+          "links": [
+            57
+          ],
+          "shape": 3
+        },
+        {
+          "name": "model_name",
+          "type": "STRING",
+          "links": [
+            40
+          ],
+          "shape": 3,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadRVCModelNode"
+      },
+      "widgets_values": [
+        "RVC/Sayano.pth"
+      ]
+    },
+    {
+      "id": 38,
+      "type": "LoadAudio",
+      "pos": [
+        -171,
+        -739
+      ],
+      "size": {
+        "0": 309.8900146484375,
+        "1": 126
+      },
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "audio_name",
+          "type": "STRING",
+          "links": [
+            62
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "vhs_audio",
+          "type": "VHS_AUDIO",
+          "links": [
+            61
+          ],
+          "shape": 3,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "Moonlight Shadow.mp3",
+        "None",
+        "image"
       ]
     }
   ],
@@ -847,7 +872,7 @@
       "font_size": 24
     },
     {
-      "title": "Ensemble Vocal",
+      "title": "Ensemble Vocal Separation",
       "bounding": [
         259,
         -810,
@@ -883,10 +908,10 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.5644739300537777,
+      "scale": 1,
       "offset": [
-        -568.7175814310663,
-        890.3856832248159
+        -539.1537258753115,
+        591.250653392065
       ]
     }
   },
