@@ -10,13 +10,22 @@ from ...lib import BASE_CACHE_DIR, BASE_MODELS_DIR
 RVC_DOWNLOAD_LINK = 'https://huggingface.co/datasets/SayanoAI/RVC-Studio/resolve/main/'
 MDX_MODELS = ["MDXNET/UVR-MDX-NET-vocal_FT.onnx"]
 KARAFAN_MODELS = ["karafan/MDX23C-8KFFT-InstVoc_HQ.ckpt"]
-VR_MODELS = ["UVR/UVR-DeEcho-DeReverb.pth","UVR/HP5-vocals+instrumentals.pth","UVR/5_HP-Karaoke-UVR.pth","UVR/model_bs_roformer_ep_317_sdr_12.9755.ckpt"]
+VR_MODELS = [
+    "UVR/UVR-DeEcho-DeReverb.pth",
+    "UVR/HP5-vocals+instrumentals.pth",
+    "UVR/5_HP-Karaoke-UVR.pth",
+    "UVR/6_HP-Karaoke-UVR.pth",
+    "UVR/model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+    "UVR/UVR-BVE-4B_SN-44100-1.pth",
+    "UVR/UVR-DeNoise.pth"
+]
 RVC_MODELS = [
     "RVC/Claire.pth",
     "RVC/Sayano.pth",
     "RVC/Mae_v2.pth",
     "RVC/Fuji.pth",
-    "RVC/Monika.pth"]
+    "RVC/Monika.pth"
+]
 BASE_MODELS = ["hubert_base.pt", "rmvpe.pt"]
 VITS_MODELS = ["VITS/pretrained_ljs.pth"]
 PRETRAINED_MODELS = [
