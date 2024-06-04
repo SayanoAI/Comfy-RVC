@@ -43,7 +43,7 @@ if %errorlevel% == 0 (
 	rem install CUDA torch
 	CALL pip install torch==2.0.1+cu118 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118
 	
-    CALL python main.py --preview-method=taesd --auto-launch
+    CALL python main.py --preview-method=taesd
 ) else (
     echo Failed to activate environment...
 )

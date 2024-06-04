@@ -121,7 +121,7 @@ class VC(FeatureExtractor):
 
     def pipeline(self, model, net_g, sid, audio, times, f0_up_key, f0_method, merge_type,
             file_index, index_rate, if_f0, filter_radius, tgt_sr, resample_sr, rms_mix_rate,
-            version, protect, crepe_hop_length, f0_autotune, rmvpe_onnx, f0_file=None, f0_min=50, f0_max=1100):
+            version, protect, crepe_hop_length, f0_autotune, rmvpe_onnx, f0_file=None, f0_min=50, f0_max=1600):
         
         
         index, big_npy = self.load_index(file_index)

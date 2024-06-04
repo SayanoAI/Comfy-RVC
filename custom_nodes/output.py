@@ -1,7 +1,7 @@
 import os
 import shutil
 
-from ..lib.audio import SUPPORTED_AUDIO, audio_to_bytes, bytes_to_audio, load_input_audio, save_input_audio
+from ..lib.audio import SUPPORTED_AUDIO, audio_to_bytes, bytes_to_audio, save_input_audio
 from ..lib.utils import get_hash
 from .utils import increment_filename_no_overwrite
 import folder_paths
@@ -48,7 +48,6 @@ class PreviewAudio:
         if os.path.isfile(output_path) and not overwrite_existing:
             output_path = increment_filename_no_overwrite(output_path)
         
-        
         input_audio = bytes_to_audio(audio())
         print(save_input_audio(output_path,input_audio,to_int16=True,to_stereo=save_channels==2))
 
@@ -57,7 +56,7 @@ class PreviewAudio:
         widgetId = get_hash(output_path,save_channels)
         audio_name = f"{widgetId}.{save_format}"
         preview_file = os.path.join(tempdir,audio_name)
-        if not os.path.isfile(preview_file): shutil.copyfile(output_path,preview_file)
+        shutil.copyfile(output_path,preview_file)
         return {"ui": {"preview": [{
             "filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId, "autoplay": autoplay
             }]}, "result": (output_path, lambda:audio_to_bytes(*input_audio))}

@@ -6,11 +6,11 @@ import tempfile
 import torch
 import folder_paths
 from .settings import MERGE_OPTIONS
-from ..lib.utils import gc_collect, get_hash
+from ..lib.utils import gc_collect, get_hash, get_merge_func
 from .settings.downloader import RVC_DOWNLOAD_LINK, download_file
 from ..lib import BASE_MODELS_DIR
 import numpy as np
-from ..lib.audio import MAX_INT16, audio_to_bytes, bytes_to_audio, load_input_audio, merge_audio, remix_audio, save_input_audio
+from ..lib.audio import MAX_INT16, audio_to_bytes, bytes_to_audio, load_input_audio, merge_audio, pad_audio, remix_audio, save_input_audio
 
 CATEGORY = "🌺RVC-Studio/utils"
 temp_path = folder_paths.get_temp_directory()
@@ -340,11 +340,15 @@ class MergeAudioNode:
             "required": {
                 "audio1": ("VHS_AUDIO",),
                 "audio2": ("VHS_AUDIO",),
+            },
+            "optional": {
                 "sr": (["None",32000,40000,44100,48000],{
                     "default": "None"
                 }),
-                "merge_type": (MERGE_OPTIONS,{"default": "mean"}),
-                "normalize": ("BOOLEAN",{"default": True})
+                "merge_type": (MERGE_OPTIONS,{"default": "median"}),
+                "normalize": ("BOOLEAN",{"default": True}),
+                "audio3_opt": ("VHS_AUDIO",{"default": None, "forceInput": True}),
+                "audio4_opt": ("VHS_AUDIO",{"default": None, "forceInput": True}),
             }
         }
 
@@ -355,18 +359,22 @@ class MergeAudioNode:
 
     CATEGORY = CATEGORY
 
-    def merge(self, audio1, audio2, sr, merge_type, normalize):
-        if sr=="None": sr=None
+    def merge(self, audio1, audio2, sr="None", merge_type="median", normalize=False, audio3_opt=None, audio4_opt=None):
 
-        widgetId = get_hash(audio1(),audio2(),sr,merge_type,normalize)
+        audios = [audio() for audio in filter(None,[audio1, audio2, audio3_opt, audio4_opt])]
+        widgetId = get_hash(*audios,sr,merge_type,normalize)
         audio_path = os.path.join(temp_path,"preview",f"{widgetId}.flac")
 
-        if os.path.isfile(audio_path): merged_audio = load_input_audio(audio_path, sr, norm=normalize)
+        if os.path.isfile(audio_path): merged_audio = load_input_audio(audio_path)
         else:
-            input_audio1 = bytes_to_audio(audio1())
-            input_audio2 = bytes_to_audio(audio2())
-            merged_audio = merge_audio(input_audio1,input_audio2,sr=sr,to_int16=True,norm=normalize,merge_type=merge_type)
+            input_audios = [bytes_to_audio(audio) for audio in audios]
+            merged_sr = min([sr for (_,sr) in input_audios]) if sr=="None" else sr
+            input_audios = [remix_audio(audio,merged_sr,norm=normalize) for audio in input_audios]
+            merge_func = get_merge_func(merge_type)
+            merged_audio = merge_func(pad_audio(*[audio for (audio,_) in input_audios],axis=0),axis=0), merged_sr
             print(save_input_audio(audio_path,merged_audio))
+            del input_audios
+        del audios
         audio_name = os.path.basename(audio_path)
         return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda: audio_to_bytes(*merged_audio),)}
 
