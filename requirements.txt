@@ -13,3 +13,4 @@ pyaudio
 spacy
 monotonic_align
 textacy
+pytube

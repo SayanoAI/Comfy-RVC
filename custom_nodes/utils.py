@@ -207,7 +207,6 @@ class AudioBatchValueNode:
     
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
-        print(f"{args=} {kwargs=}")
         return get_hash(*args, *kwargs.items())
     
 class ImageRepeatInterleavedNode:
@@ -347,8 +346,8 @@ class MergeAudioNode:
                 }),
                 "merge_type": (MERGE_OPTIONS,{"default": "median"}),
                 "normalize": ("BOOLEAN",{"default": True}),
-                "audio3_opt": ("VHS_AUDIO",{"default": None, "forceInput": True}),
-                "audio4_opt": ("VHS_AUDIO",{"default": None, "forceInput": True}),
+                "audio3_opt": ("VHS_AUDIO",{"default": None}),
+                "audio4_opt": ("VHS_AUDIO",{"default": None}),
             }
         }
 
@@ -361,7 +360,7 @@ class MergeAudioNode:
 
     def merge(self, audio1, audio2, sr="None", merge_type="median", normalize=False, audio3_opt=None, audio4_opt=None):
 
-        audios = [audio() for audio in filter(None,[audio1, audio2, audio3_opt, audio4_opt])]
+        audios = [audio() for audio in [audio1, audio2, audio3_opt, audio4_opt] if audio is not None]
         widgetId = get_hash(*audios,sr,merge_type,normalize)
         audio_path = os.path.join(temp_path,"preview",f"{widgetId}.flac")
 
@@ -374,11 +373,12 @@ class MergeAudioNode:
             merged_audio = merge_func(pad_audio(*[audio for (audio,_) in input_audios],axis=0),axis=0), merged_sr
             print(save_input_audio(audio_path,merged_audio))
             del input_audios
+            if os.path.isfile(audio_path): merged_audio = load_input_audio(audio_path)
+            
         del audios
         audio_name = os.path.basename(audio_path)
         return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda: audio_to_bytes(*merged_audio),)}
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
-        print(f"{args=} {kwargs=}")
         return get_hash(*args, *kwargs.items())

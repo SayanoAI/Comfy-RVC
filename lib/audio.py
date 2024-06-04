@@ -111,7 +111,7 @@ def audio_to_bytes(audio,sr,target_sr=None,to_int16=False,to_stereo=False,format
         bytes_io.seek(0)
         return bytes_io.read()
 
-def bytes_to_audio(data: Union[io.BytesIO,bytes],**kwargs):
+def bytes_to_audio(data: bytes,**kwargs):
     with io.BytesIO(data) as bytes_io:
         audio, sr = sf.read(bytes_io,**kwargs)
         if audio.ndim>1:
@@ -167,7 +167,7 @@ def audio2bytes(audio: np.array, sr: int):
 def pad_audio(*audios,axis=0):
     maxlen = max(len(a) if a is not None else 0 for a in audios)
     if maxlen>0:
-        stack = librosa.util.stack([librosa.util.pad_center(data=a,size=maxlen) for a in audios if a is not None],axis=axis)
+        stack = librosa.util.stack([librosa.util.fix_length(a,size=maxlen) for a in audios if a is not None],axis=axis)
         return stack
     else: return np.stack(audios,axis=axis)
 

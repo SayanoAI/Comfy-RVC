@@ -1,338 +1,80 @@
 {
-  "last_node_id": 39,
-  "last_link_id": 64,
+  "last_node_id": 50,
+  "last_link_id": 159,
   "nodes": [
     {
-      "id": 7,
-      "type": "UVR5Node",
+      "id": 31,
+      "type": "JoinStrings",
       "pos": [
-        269,
-        -736
+        1394,
+        -786
       ],
       "size": {
         "0": 315,
-        "1": 170
+        "1": 106
       },
-      "flags": {},
+      "flags": {
+        "collapsed": true
+      },
       "order": 6,
       "mode": 0,
       "inputs": [
         {
-          "name": "audio",
-          "type": "VHS_AUDIO",
-          "link": 20
+          "name": "string1",
+          "type": "STRING",
+          "link": 66,
+          "widget": {
+            "name": "string1"
+          }
+        },
+        {
+          "name": "string2",
+          "type": "STRING",
+          "link": 138,
+          "widget": {
+            "name": "string2"
+          }
         }
       ],
       "outputs": [
         {
-          "name": "primary_stem",
-          "type": "VHS_AUDIO",
+          "name": "STRING",
+          "type": "STRING",
           "links": [
-            49
-          ],
-          "shape": 3,
-          "slot_index": 0
-        },
-        {
-          "name": "secondary_stem",
-          "type": "VHS_AUDIO",
-          "links": [
-            51
-          ],
-          "shape": 3,
-          "slot_index": 1
-        },
-        {
-          "name": "audio_passthrough",
-          "type": "VHS_AUDIO",
-          "links": null,
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "UVR5Node"
-      },
-      "widgets_values": [
-        "karafan/MDX23C-8KFFT-InstVoc_HQ.ckpt",
-        10,
-        "flac",
-        true
-      ]
-    },
-    {
-      "id": 14,
-      "type": "UVR5Node",
-      "pos": [
-        277,
-        -505
-      ],
-      "size": {
-        "0": 315,
-        "1": 170
-      },
-      "flags": {},
-      "order": 7,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "audio",
-          "type": "VHS_AUDIO",
-          "link": 24
-        }
-      ],
-      "outputs": [
-        {
-          "name": "primary_stem",
-          "type": "VHS_AUDIO",
-          "links": [
-            50
-          ],
-          "shape": 3,
-          "slot_index": 0
-        },
-        {
-          "name": "secondary_stem",
-          "type": "VHS_AUDIO",
-          "links": [
-            52
-          ],
-          "shape": 3,
-          "slot_index": 1
-        },
-        {
-          "name": "audio_passthrough",
-          "type": "VHS_AUDIO",
-          "links": null,
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "UVR5Node"
-      },
-      "widgets_values": [
-        "UVR/HP5-vocals+instrumentals.pth",
-        10,
-        "flac",
-        true
-      ]
-    },
-    {
-      "id": 17,
-      "type": "UVR5Node",
-      "pos": [
-        272.40658221699283,
-        -161.99581170557863
-      ],
-      "size": {
-        "0": 315,
-        "1": 170
-      },
-      "flags": {},
-      "order": 10,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "audio",
-          "type": "VHS_AUDIO",
-          "link": 53
-        }
-      ],
-      "outputs": [
-        {
-          "name": "primary_stem",
-          "type": "VHS_AUDIO",
-          "links": [
-            56
-          ],
-          "shape": 3,
-          "slot_index": 0
-        },
-        {
-          "name": "secondary_stem",
-          "type": "VHS_AUDIO",
-          "links": [],
-          "shape": 3,
-          "slot_index": 1
-        },
-        {
-          "name": "audio_passthrough",
-          "type": "VHS_AUDIO",
-          "links": null,
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "UVR5Node"
-      },
-      "widgets_values": [
-        "UVR/5_HP-Karaoke-UVR.pth",
-        10,
-        "flac",
-        true
-      ]
-    },
-    {
-      "id": 6,
-      "type": "LoadPitchExtractionParams",
-      "pos": [
-        288,
-        105
-      ],
-      "size": {
-        "0": 315,
-        "1": 178
-      },
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "pitch_extraction_params",
-          "type": "PITCH_EXTRACTION",
-          "links": [
-            59
-          ],
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadPitchExtractionParams"
-      },
-      "widgets_values": [
-        "rmvpe+",
-        false,
-        0.75,
-        0,
-        0.25,
-        0.25
-      ]
-    },
-    {
-      "id": 35,
-      "type": "MergeAudioNode",
-      "pos": [
-        666,
-        -728
-      ],
-      "size": [
-        315,
-        126
-      ],
-      "flags": {},
-      "order": 8,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "audio1",
-          "type": "VHS_AUDIO",
-          "link": 49
-        },
-        {
-          "name": "audio2",
-          "type": "VHS_AUDIO",
-          "link": 50
-        }
-      ],
-      "outputs": [
-        {
-          "name": "vhs_audio",
-          "type": "VHS_AUDIO",
-          "links": [
-            53
+            64
           ],
           "shape": 3,
           "slot_index": 0
         }
       ],
       "properties": {
-        "Node name for S&R": "MergeAudioNode"
+        "Node name for S&R": "JoinStrings"
       },
       "widgets_values": [
-        "None",
-        "min",
-        true,
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        }
-      ]
-    },
-    {
-      "id": 36,
-      "type": "MergeAudioNode",
-      "pos": [
-        676,
-        -528
-      ],
-      "size": [
-        315,
-        126
-      ],
-      "flags": {},
-      "order": 9,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "audio1",
-          "type": "VHS_AUDIO",
-          "link": 51
-        },
-        {
-          "name": "audio2",
-          "type": "VHS_AUDIO",
-          "link": 52
-        }
-      ],
-      "outputs": [
-        {
-          "name": "vhs_audio",
-          "type": "VHS_AUDIO",
-          "links": [
-            54
-          ],
-          "shape": 3,
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "MergeAudioNode"
-      },
-      "widgets_values": [
-        "None",
-        "mean",
-        true,
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        }
+        "",
+        "",
+        "\\"
       ]
     },
     {
       "id": 37,
       "type": "RVCNode",
       "pos": [
-        643,
-        5
+        1300,
+        -248
       ],
       "size": [
         309.34271240234375,
         166
       ],
       "flags": {},
-      "order": 11,
+      "order": 17,
       "mode": 0,
       "inputs": [
         {
           "name": "audio",
           "type": "VHS_AUDIO",
-          "link": 56
+          "link": 135
         },
         {
           "name": "model",
@@ -372,22 +114,255 @@
           "hidden": false,
           "paused": false,
           "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
         }
       ]
     },
     {
-      "id": 33,
-      "type": "MergeAudioNode",
+      "id": 49,
+      "type": "DownloadAudio",
       "pos": [
-        1154,
-        -367
+        -538,
+        -794
       ],
       "size": [
         315,
         126
       ],
       "flags": {},
-      "order": 12,
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "audio_name",
+          "type": "STRING",
+          "links": [
+            138
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "vhs_audio",
+          "type": "VHS_AUDIO",
+          "links": [
+            136,
+            137
+          ],
+          "shape": 3,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "DownloadAudio"
+      },
+      "widgets_values": [
+        "https://www.youtube.com/watch?v=DSnJ76vPi_8",
+        "None",
+        "Monologue of Three",
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "LoadHubertModel",
+      "pos": [
+        1010,
+        -145
+      ],
+      "size": {
+        "0": 315,
+        "1": 58
+      },
+      "flags": {
+        "collapsed": true
+      },
+      "order": 1,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "hubert_model",
+          "type": "HUBERT_MODEL",
+          "links": [
+            58
+          ],
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadHubertModel"
+      },
+      "widgets_values": [
+        "hubert_base.pt"
+      ]
+    },
+    {
+      "id": 6,
+      "type": "LoadPitchExtractionParams",
+      "pos": [
+        1297,
+        -467
+      ],
+      "size": {
+        "0": 315,
+        "1": 178
+      },
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "pitch_extraction_params",
+          "type": "PITCH_EXTRACTION",
+          "links": [
+            59
+          ],
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadPitchExtractionParams"
+      },
+      "widgets_values": [
+        "rmvpe+",
+        false,
+        0.75,
+        0,
+        0.25,
+        0.25
+      ]
+    },
+    {
+      "id": 4,
+      "type": "LoadRVCModelNode",
+      "pos": [
+        953,
+        -97
+      ],
+      "size": {
+        "0": 315,
+        "1": 78
+      },
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "model",
+          "type": "RVC_MODEL",
+          "links": [
+            57
+          ],
+          "shape": 3
+        },
+        {
+          "name": "model_name",
+          "type": "STRING",
+          "links": [
+            66
+          ],
+          "shape": 3,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadRVCModelNode"
+      },
+      "widgets_values": [
+        "RVC/Sayano.pth"
+      ]
+    },
+    {
+      "id": 33,
+      "type": "MergeAudioNode",
+      "pos": [
+        1702,
+        -801
+      ],
+      "size": [
+        315,
+        166
+      ],
+      "flags": {},
+      "order": 18,
       "mode": 0,
       "inputs": [
         {
@@ -399,6 +374,16 @@
           "name": "audio2",
           "type": "VHS_AUDIO",
           "link": 60
+        },
+        {
+          "name": "audio3_opt",
+          "type": "VHS_AUDIO",
+          "link": null
+        },
+        {
+          "name": "audio4_opt",
+          "type": "VHS_AUDIO",
+          "link": null
         }
       ],
       "outputs": [
@@ -417,8 +402,38 @@
       },
       "widgets_values": [
         "None",
-        "mean",
-        true,
+        "median",
+        false,
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
         {
           "hidden": false,
           "paused": false,
@@ -427,72 +442,18 @@
       ]
     },
     {
-      "id": 31,
-      "type": "JoinStrings",
-      "pos": [
-        726,
-        241
-      ],
-      "size": {
-        "0": 315,
-        "1": 106
-      },
-      "flags": {
-        "collapsed": true
-      },
-      "order": 4,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "string1",
-          "type": "STRING",
-          "link": 62,
-          "widget": {
-            "name": "string1"
-          }
-        },
-        {
-          "name": "string2",
-          "type": "STRING",
-          "link": 40,
-          "widget": {
-            "name": "string2"
-          }
-        }
-      ],
-      "outputs": [
-        {
-          "name": "STRING",
-          "type": "STRING",
-          "links": [
-            64
-          ],
-          "shape": 3,
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "JoinStrings"
-      },
-      "widgets_values": [
-        "",
-        "",
-        "\\"
-      ]
-    },
-    {
       "id": 39,
       "type": "PreviewAudio",
       "pos": [
-        1514,
-        -358
+        2056,
+        -794
       ],
       "size": [
         315,
         150
       ],
       "flags": {},
-      "order": 13,
+      "order": 19,
       "mode": 0,
       "inputs": [
         {
@@ -537,15 +498,45 @@
           "hidden": false,
           "paused": false,
           "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
         }
       ]
     },
     {
-      "id": 11,
+      "id": 44,
       "type": "UVR5Node",
       "pos": [
-        -172,
-        -567
+        -543,
+        -582
       ],
       "size": {
         "0": 315,
@@ -558,7 +549,7 @@
         {
           "name": "audio",
           "type": "VHS_AUDIO",
-          "link": 61
+          "link": 137
         }
       ],
       "outputs": [
@@ -566,6 +557,154 @@
           "name": "primary_stem",
           "type": "VHS_AUDIO",
           "links": null,
+          "shape": 3
+        },
+        {
+          "name": "secondary_stem",
+          "type": "VHS_AUDIO",
+          "links": [
+            97
+          ],
+          "shape": 3,
+          "slot_index": 1
+        },
+        {
+          "name": "audio_passthrough",
+          "type": "VHS_AUDIO",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UVR5Node"
+      },
+      "widgets_values": [
+        "UVR/UVR-BVE-4B_SN-44100-1.pth",
+        true,
+        10,
+        "flac"
+      ]
+    },
+    {
+      "id": 36,
+      "type": "MergeAudioNode",
+      "pos": [
+        527,
+        -795
+      ],
+      "size": [
+        315,
+        166
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio1",
+          "type": "VHS_AUDIO",
+          "link": 158
+        },
+        {
+          "name": "audio2",
+          "type": "VHS_AUDIO",
+          "link": 156
+        },
+        {
+          "name": "audio3_opt",
+          "type": "VHS_AUDIO",
+          "link": 108
+        },
+        {
+          "name": "audio4_opt",
+          "type": "VHS_AUDIO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "vhs_audio",
+          "type": "VHS_AUDIO",
+          "links": [
+            54
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "title": "🌺Merge Instrumental",
+      "properties": {
+        "Node name for S&R": "MergeAudioNode"
+      },
+      "widgets_values": [
+        "None",
+        "median",
+        true,
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "UVR5Node",
+      "pos": [
+        179,
+        -579
+      ],
+      "size": {
+        "0": 315,
+        "1": 170
+      },
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "VHS_AUDIO",
+          "link": 99
+        }
+      ],
+      "outputs": [
+        {
+          "name": "primary_stem",
+          "type": "VHS_AUDIO",
+          "links": [
+            156
+          ],
           "shape": 3,
           "slot_index": 0
         },
@@ -573,9 +712,280 @@
           "name": "secondary_stem",
           "type": "VHS_AUDIO",
           "links": [
-            20,
-            24
+            157
           ],
+          "shape": 3,
+          "slot_index": 1
+        },
+        {
+          "name": "audio_passthrough",
+          "type": "VHS_AUDIO",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UVR5Node"
+      },
+      "widgets_values": [
+        "karafan/MDX23C-8KFFT-InstVoc_HQ.ckpt",
+        10,
+        10,
+        "flac"
+      ]
+    },
+    {
+      "id": 47,
+      "type": "UVR5Node",
+      "pos": [
+        180,
+        -353
+      ],
+      "size": {
+        "0": 315,
+        "1": 170
+      },
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "VHS_AUDIO",
+          "link": 106
+        }
+      ],
+      "outputs": [
+        {
+          "name": "primary_stem",
+          "type": "VHS_AUDIO",
+          "links": [
+            141
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "secondary_stem",
+          "type": "VHS_AUDIO",
+          "links": [
+            108
+          ],
+          "shape": 3,
+          "slot_index": 1
+        },
+        {
+          "name": "audio_passthrough",
+          "type": "VHS_AUDIO",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UVR5Node"
+      },
+      "widgets_values": [
+        "UVR/HP5-vocals+instrumentals.pth",
+        true,
+        10,
+        "flac"
+      ]
+    },
+    {
+      "id": 7,
+      "type": "UVR5Node",
+      "pos": [
+        173,
+        -800
+      ],
+      "size": {
+        "0": 315,
+        "1": 170
+      },
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "VHS_AUDIO",
+          "link": 98
+        }
+      ],
+      "outputs": [
+        {
+          "name": "primary_stem",
+          "type": "VHS_AUDIO",
+          "links": [
+            158
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "secondary_stem",
+          "type": "VHS_AUDIO",
+          "links": [
+            159
+          ],
+          "shape": 3,
+          "slot_index": 1
+        },
+        {
+          "name": "audio_passthrough",
+          "type": "VHS_AUDIO",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UVR5Node"
+      },
+      "widgets_values": [
+        "UVR/model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+        10,
+        10,
+        "flac"
+      ]
+    },
+    {
+      "id": 43,
+      "type": "MergeAudioNode",
+      "pos": [
+        -209,
+        -583
+      ],
+      "size": [
+        315,
+        166
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio1",
+          "type": "VHS_AUDIO",
+          "link": 153
+        },
+        {
+          "name": "audio2",
+          "type": "VHS_AUDIO",
+          "link": 97
+        },
+        {
+          "name": "audio3_opt",
+          "type": "VHS_AUDIO",
+          "link": null
+        },
+        {
+          "name": "audio4_opt",
+          "type": "VHS_AUDIO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "vhs_audio",
+          "type": "VHS_AUDIO",
+          "links": [
+            98,
+            99,
+            106
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MergeAudioNode"
+      },
+      "widgets_values": [
+        "None",
+        "median",
+        true,
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "UVR5Node",
+      "pos": [
+        -208,
+        -796
+      ],
+      "size": {
+        "0": 315,
+        "1": 170
+      },
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "VHS_AUDIO",
+          "link": 136
+        }
+      ],
+      "outputs": [
+        {
+          "name": "primary_stem",
+          "type": "VHS_AUDIO",
+          "links": [
+            153
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "secondary_stem",
+          "type": "VHS_AUDIO",
+          "links": [],
           "shape": 3,
           "slot_index": 1
         },
@@ -592,205 +1002,382 @@
       "widgets_values": [
         "UVR/UVR-DeEcho-DeReverb.pth",
         10,
-        "flac",
-        true
+        10,
+        "flac"
       ]
     },
     {
-      "id": 5,
-      "type": "LoadHubertModel",
+      "id": 50,
+      "type": "MergeAudioNode",
       "pos": [
-        306,
-        51
+        531,
+        -478
       ],
-      "size": {
-        "0": 315,
-        "1": 58
-      },
-      "flags": {
-        "collapsed": true
-      },
-      "order": 1,
+      "size": [
+        315,
+        166
+      ],
+      "flags": {},
+      "order": 11,
       "mode": 0,
+      "inputs": [
+        {
+          "name": "audio1",
+          "type": "VHS_AUDIO",
+          "link": 159
+        },
+        {
+          "name": "audio2",
+          "type": "VHS_AUDIO",
+          "link": 157
+        },
+        {
+          "name": "audio3_opt",
+          "type": "VHS_AUDIO",
+          "link": 141
+        },
+        {
+          "name": "audio4_opt",
+          "type": "VHS_AUDIO",
+          "link": null
+        }
+      ],
       "outputs": [
         {
-          "name": "hubert_model",
-          "type": "HUBERT_MODEL",
+          "name": "vhs_audio",
+          "type": "VHS_AUDIO",
           "links": [
-            58
+            142
           ],
-          "shape": 3
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "title": "🌺Merge Vocals",
+      "properties": {
+        "Node name for S&R": "MergeAudioNode"
+      },
+      "widgets_values": [
+        "None",
+        "min",
+        true,
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      ]
+    },
+    {
+      "id": 46,
+      "type": "MergeAudioNode",
+      "pos": [
+        1296,
+        -735
+      ],
+      "size": [
+        315,
+        166
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio1",
+          "type": "VHS_AUDIO",
+          "link": 152
+        },
+        {
+          "name": "audio2",
+          "type": "VHS_AUDIO",
+          "link": 151
+        },
+        {
+          "name": "audio3_opt",
+          "type": "VHS_AUDIO",
+          "link": null,
+          "slot_index": 2
+        },
+        {
+          "name": "audio4_opt",
+          "type": "VHS_AUDIO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "vhs_audio",
+          "type": "VHS_AUDIO",
+          "links": [
+            135
+          ],
+          "shape": 3,
+          "slot_index": 0
         }
       ],
       "properties": {
-        "Node name for S&R": "LoadHubertModel"
+        "Node name for S&R": "MergeAudioNode"
       },
       "widgets_values": [
-        "hubert_base.pt"
+        "None",
+        "median",
+        true,
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
       ]
     },
     {
-      "id": 4,
-      "type": "LoadRVCModelNode",
+      "id": 17,
+      "type": "UVR5Node",
       "pos": [
-        649,
-        -136
+        950,
+        -581
       ],
       "size": {
         "0": 315,
-        "1": 78
+        "1": 170
       },
       "flags": {},
-      "order": 2,
+      "order": 14,
       "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "VHS_AUDIO",
+          "link": 148
+        }
+      ],
       "outputs": [
         {
-          "name": "model",
-          "type": "RVC_MODEL",
-          "links": [
-            57
-          ],
-          "shape": 3
+          "name": "primary_stem",
+          "type": "VHS_AUDIO",
+          "links": [],
+          "shape": 3,
+          "slot_index": 0
         },
         {
-          "name": "model_name",
-          "type": "STRING",
+          "name": "secondary_stem",
+          "type": "VHS_AUDIO",
           "links": [
-            40
+            152
           ],
           "shape": 3,
           "slot_index": 1
+        },
+        {
+          "name": "audio_passthrough",
+          "type": "VHS_AUDIO",
+          "links": null,
+          "shape": 3
         }
       ],
       "properties": {
-        "Node name for S&R": "LoadRVCModelNode"
+        "Node name for S&R": "UVR5Node"
       },
       "widgets_values": [
-        "RVC/Sayano.pth"
+        "UVR/5_HP-Karaoke-UVR.pth",
+        10,
+        10,
+        "flac"
       ]
     },
     {
-      "id": 38,
-      "type": "LoadAudio",
+      "id": 40,
+      "type": "UVR5Node",
       "pos": [
-        -171,
-        -739
+        955,
+        -370
       ],
       "size": {
-        "0": 309.8900146484375,
-        "1": 126
+        "0": 315,
+        "1": 170
       },
       "flags": {},
-      "order": 3,
+      "order": 15,
       "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "VHS_AUDIO",
+          "link": 149
+        }
+      ],
       "outputs": [
         {
-          "name": "audio_name",
-          "type": "STRING",
+          "name": "primary_stem",
+          "type": "VHS_AUDIO",
+          "links": [],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "secondary_stem",
+          "type": "VHS_AUDIO",
           "links": [
-            62
+            151
+          ],
+          "shape": 3,
+          "slot_index": 1
+        },
+        {
+          "name": "audio_passthrough",
+          "type": "VHS_AUDIO",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UVR5Node"
+      },
+      "widgets_values": [
+        "UVR/6_HP-Karaoke-UVR.pth",
+        true,
+        10,
+        "flac"
+      ]
+    },
+    {
+      "id": 45,
+      "type": "UVR5Node",
+      "pos": [
+        955,
+        -794
+      ],
+      "size": {
+        "0": 315,
+        "1": 170
+      },
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "VHS_AUDIO",
+          "link": 142
+        }
+      ],
+      "outputs": [
+        {
+          "name": "primary_stem",
+          "type": "VHS_AUDIO",
+          "links": [
+            148,
+            149
           ],
           "shape": 3,
           "slot_index": 0
         },
         {
-          "name": "vhs_audio",
+          "name": "secondary_stem",
           "type": "VHS_AUDIO",
-          "links": [
-            61
-          ],
+          "links": [],
           "shape": 3,
           "slot_index": 1
+        },
+        {
+          "name": "audio_passthrough",
+          "type": "VHS_AUDIO",
+          "links": null,
+          "shape": 3
         }
       ],
       "properties": {
-        "Node name for S&R": "LoadAudio"
+        "Node name for S&R": "UVR5Node"
       },
       "widgets_values": [
-        "Moonlight Shadow.mp3",
-        "None",
-        "image"
+        "UVR/UVR-DeEcho-DeReverb.pth",
+        true,
+        10,
+        "flac"
       ]
     }
   ],
   "links": [
     [
-      20,
-      11,
-      1,
-      7,
-      0,
-      "VHS_AUDIO"
-    ],
-    [
-      24,
-      11,
-      1,
-      14,
-      0,
-      "VHS_AUDIO"
-    ],
-    [
-      40,
-      4,
-      1,
-      31,
-      1,
-      "STRING"
-    ],
-    [
-      49,
-      7,
-      0,
-      35,
-      0,
-      "VHS_AUDIO"
-    ],
-    [
-      50,
-      14,
-      0,
-      35,
-      1,
-      "VHS_AUDIO"
-    ],
-    [
-      51,
-      7,
-      1,
-      36,
-      0,
-      "VHS_AUDIO"
-    ],
-    [
-      52,
-      14,
-      1,
-      36,
-      1,
-      "VHS_AUDIO"
-    ],
-    [
-      53,
-      35,
-      0,
-      17,
-      0,
-      "VHS_AUDIO"
-    ],
-    [
       54,
       36,
       0,
       33,
-      0,
-      "VHS_AUDIO"
-    ],
-    [
-      56,
-      17,
-      0,
-      37,
       0,
       "VHS_AUDIO"
     ],
@@ -827,22 +1414,6 @@
       "VHS_AUDIO"
     ],
     [
-      61,
-      38,
-      1,
-      11,
-      0,
-      "VHS_AUDIO"
-    ],
-    [
-      62,
-      38,
-      0,
-      31,
-      0,
-      "STRING"
-    ],
-    [
       63,
       33,
       0,
@@ -857,16 +1428,184 @@
       39,
       1,
       "STRING"
+    ],
+    [
+      66,
+      4,
+      1,
+      31,
+      0,
+      "STRING"
+    ],
+    [
+      97,
+      44,
+      1,
+      43,
+      1,
+      "VHS_AUDIO"
+    ],
+    [
+      98,
+      43,
+      0,
+      7,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      99,
+      43,
+      0,
+      14,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      106,
+      43,
+      0,
+      47,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      108,
+      47,
+      1,
+      36,
+      2,
+      "VHS_AUDIO"
+    ],
+    [
+      135,
+      46,
+      0,
+      37,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      136,
+      49,
+      1,
+      11,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      137,
+      49,
+      1,
+      44,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      138,
+      49,
+      0,
+      31,
+      1,
+      "STRING"
+    ],
+    [
+      141,
+      47,
+      0,
+      50,
+      2,
+      "VHS_AUDIO"
+    ],
+    [
+      142,
+      50,
+      0,
+      45,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      148,
+      45,
+      0,
+      17,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      149,
+      45,
+      0,
+      40,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      151,
+      40,
+      1,
+      46,
+      1,
+      "VHS_AUDIO"
+    ],
+    [
+      152,
+      17,
+      1,
+      46,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      153,
+      11,
+      0,
+      43,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      156,
+      14,
+      0,
+      36,
+      1,
+      "VHS_AUDIO"
+    ],
+    [
+      157,
+      14,
+      1,
+      50,
+      1,
+      "VHS_AUDIO"
+    ],
+    [
+      158,
+      7,
+      0,
+      36,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      159,
+      7,
+      1,
+      50,
+      0,
+      "VHS_AUDIO"
     ]
   ],
   "groups": [
     {
       "title": "Preprocess",
       "bounding": [
-        -181,
-        -813,
-        336,
-        507
+        -557,
+        -873,
+        674,
+        471
       ],
       "color": "#3f789e",
       "font_size": 24
@@ -874,10 +1613,10 @@
     {
       "title": "Ensemble Vocal Separation",
       "bounding": [
-        259,
-        -810,
-        742,
-        485
+        163,
+        -874,
+        694,
+        701
       ],
       "color": "#3f789e",
       "font_size": 24
@@ -885,10 +1624,10 @@
     {
       "title": "Postprocess",
       "bounding": [
-        262,
-        -236,
-        712,
-        529
+        940,
+        -867,
+        694,
+        860
       ],
       "color": "#3f789e",
       "font_size": 24
@@ -896,8 +1635,8 @@
     {
       "title": "Output Audio",
       "bounding": [
-        1144,
-        -441,
+        1690,
+        -872,
         698,
         255
       ],
@@ -908,10 +1647,10 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 1,
+      "scale": 0.6830134553650706,
       "offset": [
-        -539.1537258753115,
-        591.250653392065
+        -663.7036134395787,
+        1119.9858379127336
       ]
     }
   },

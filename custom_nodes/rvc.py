@@ -1,7 +1,7 @@
 import os
 import shutil
 
-from ..lib.audio import audio_to_bytes, bytes_to_audio, load_input_audio, save_input_audio
+from ..lib.audio import SUPPORTED_AUDIO, audio_to_bytes, bytes_to_audio, load_input_audio, save_input_audio
 
 from ..vc_infer_pipeline import vc_single
 import folder_paths
@@ -42,9 +42,7 @@ class RVCNode:
                 }),
             },
             "optional": {
-                "format":(["wav", "flac", "mp3"],{
-                    "default": "flac"
-                }),
+                "format":(SUPPORTED_AUDIO,{"default": "flac"}),
                 "use_cache": ("BOOLEAN",{"default": True})
             }
         }
@@ -66,7 +64,10 @@ class RVCNode:
         else:
             input_audio = bytes_to_audio(audio())
             output_audio = vc_single(hubert_model=hubert_model(),input_audio=input_audio,f0_up_key=f0_up_key,**model(),**pitch_extraction_params)
-            print(save_input_audio(cache_name, output_audio))
+            
+            if use_cache:
+                print(save_input_audio(cache_name, output_audio))
+                if os.path.isfile(cache_name): output_audio = load_input_audio(cache_name)
         
         tempdir = os.path.join(temp_path,"preview")
         os.makedirs(tempdir, exist_ok=True)
@@ -78,7 +79,6 @@ class RVCNode:
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
-        print(f"{args=} {kwargs=}")
         return get_hash(*args, *kwargs.items())
     
 

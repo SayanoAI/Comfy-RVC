@@ -346,6 +346,9 @@ app.registerExtension({
                     addUploadWidget(nodeType, nodeData, "audio", "audio")
                     addPreviewWidget(nodeType, nodeData, "audio", "onNodeCreated" )
                     break
+                case "DownloadAudio":
+                    addPreviewWidget(nodeType, nodeData, "audio", "onExecuted" )
+                    break
                 case "PreviewAudio":
                     addPreviewWidget(nodeType, nodeData, "audio", "onExecuted" )
                     break

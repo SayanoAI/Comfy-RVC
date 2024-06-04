@@ -1,7 +1,8 @@
+from io import BytesIO
 import os
 import subprocess
 import sys
-
+from pytube import YouTube
 from .settings import PITCH_EXTRACTION_OPTIONS
 from ..lib import BASE_MODELS_DIR
 from ..lib.model_utils import load_hubert
@@ -11,12 +12,13 @@ import torch
 import folder_paths
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 from ..vc_infer_pipeline import get_vc
-from .settings.downloader import RVC_DOWNLOAD_LINK, RVC_MODELS, download_file
-from ..lib.audio import SUPPORTED_AUDIO, audio_to_bytes, load_input_audio
+from .settings.downloader import RVC_DOWNLOAD_LINK, RVC_MODELS, download_file, slugify_filepath
+from ..lib.audio import SUPPORTED_AUDIO, audio_to_bytes, bytes_to_audio, load_input_audio, save_input_audio
 from ..config import config
 
 input_path = folder_paths.get_input_directory()
 temp_path = folder_paths.get_temp_directory()
+CATEGORY = "🌺RVC-Studio/loaders"
 
 model_ids = [
     'openai/whisper-large-v3',
@@ -75,7 +77,7 @@ class LoadPitchExtractionParams:
     RETURN_TYPES = ('PITCH_EXTRACTION', )
     RETURN_NAMES = ('pitch_extraction_params', )
 
-    CATEGORY = "🌺RVC-Studio/loaders"
+    CATEGORY = CATEGORY
 
     FUNCTION = 'load_params'
 
@@ -96,7 +98,7 @@ class LoadHubertModel:
     RETURN_TYPES = ('HUBERT_MODEL', )
     RETURN_NAMES = ('hubert_model', )
 
-    CATEGORY = "🌺RVC-Studio/loaders"
+    CATEGORY = CATEGORY
 
     FUNCTION = 'load_model'
 
@@ -124,7 +126,7 @@ class LoadRVCModelNode:
     RETURN_TYPES = ('RVC_MODEL', 'STRING')
     RETURN_NAMES = ('model', 'model_name')
 
-    CATEGORY = "🌺RVC-Studio/loaders"
+    CATEGORY = CATEGORY
 
     FUNCTION = 'load_model'
 
@@ -167,7 +169,7 @@ class LoadWhisperModelNode:
     RETURN_TYPES = ('TRANSCRIPTION_MODEL', )
     RETURN_NAMES = ('model', )
 
-    CATEGORY = "🌺RVC-Studio/loaders"
+    CATEGORY = CATEGORY
 
     FUNCTION = 'load_model'
 
@@ -233,7 +235,7 @@ class LoadAudio:
                 "sr": (["None",16000,44100,48000],{"default": "None"}),
             }}
 
-    CATEGORY = "🌺RVC-Studio/loaders"
+    CATEGORY = CATEGORY
 
     RETURN_TYPES = ("STRING","VHS_AUDIO")
     RETURN_NAMES = ("audio_name","vhs_audio")
@@ -252,3 +254,52 @@ class LoadAudio:
         audio_path = folder_paths.get_annotated_filepath(audio)
         print(f"{audio_path=}")
         return get_file_hash(audio_path)
+    
+class DownloadAudio:
+    @classmethod
+    def INPUT_TYPES(cls):
+        input_dir = input_path
+        files = get_filenames(root=input_dir,exts=SUPPORTED_AUDIO,format_func=os.path.basename)
+        
+        return {
+            "required": {
+                "url": ("STRING", {"default": ""})
+            },
+            "optional": {
+                "sr": (["None",16000,44100,48000],{"default": "None"}),
+                "song_name": ("STRING",{"default": ""},)
+            }
+        }
+
+    CATEGORY = CATEGORY
+
+    RETURN_TYPES = ("STRING","VHS_AUDIO")
+    RETURN_NAMES = ("audio_name","vhs_audio")
+    FUNCTION = "download_audio"
+
+    def download_audio(self, url, sr="None", song_name=""):
+
+        assert "youtube" in url, "Please provide a valid youtube URL!"
+        widgetId = get_hash(url, sr)
+        sr = None if sr=="None" else int(sr)
+        audio_name = widgetId if song_name=="" else song_name
+        audio_path = os.path.join(input_path,f"{audio_name}.mp3")
+
+        if os.path.isfile(audio_path): input_audio = load_input_audio(audio_path,sr=sr)
+        else:
+            youtube_video = YouTube(url)
+            audio = youtube_video.streams.get_audio_only(subtype="mp4")
+            buffer = BytesIO()
+            audio.stream_to_buffer(buffer)
+            buffer.seek(0)
+            with open(audio_path,"wb") as f:
+                f.write(buffer.read())
+            buffer.close()
+            input_audio = load_input_audio(audio_path,sr=sr)
+            del buffer, audio
+
+        return {"ui": {"preview": [{"filename": os.path.basename(audio_path), "type": "input", "widgetId": widgetId}]}, "result": (audio_name, lambda:audio_to_bytes(*input_audio))}
+
+    @classmethod
+    def IS_CHANGED(cls, url):
+        return get_hash(url)
