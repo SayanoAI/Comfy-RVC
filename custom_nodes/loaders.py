@@ -12,8 +12,8 @@ import torch
 import folder_paths
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 from ..vc_infer_pipeline import get_vc
-from .settings.downloader import RVC_DOWNLOAD_LINK, RVC_MODELS, download_file, slugify_filepath
-from ..lib.audio import SUPPORTED_AUDIO, audio_to_bytes, bytes_to_audio, load_input_audio, save_input_audio
+from .settings.downloader import RVC_DOWNLOAD_LINK, RVC_INDEX, RVC_MODELS, download_file
+from ..lib.audio import SUPPORTED_AUDIO, audio_to_bytes, load_input_audio
 from ..config import config
 
 input_path = folder_paths.get_input_directory()
@@ -117,10 +117,16 @@ class LoadRVCModelNode:
     def INPUT_TYPES(cls):
         model_list = RVC_MODELS + get_filenames(root=BASE_MODELS_DIR,folder="RVC",exts=["pth"],format_func=lambda x: f"RVC/{os.path.basename(x)}")
         model_list = list(set(model_list)) # dedupe
+        index_list = ["None"] + RVC_INDEX + get_filenames(root=BASE_MODELS_DIR,folder="RVC",exts=["index"],format_func=lambda x: f"RVC/.index/{os.path.basename(x)}")
+        index_list = list(set(index_list)) # dedupe
+
         return {
             'required': {
-                'model': (model_list,{"default": "RVC/Sayano.pth"}),
+                'model': (model_list,{"default": model_list[0]}),
             },
+            "optional": {
+                "index": (index_list,{"default": "None"}),
+            }
         }
 
     RETURN_TYPES = ('RVC_MODEL', 'STRING')
@@ -134,21 +140,26 @@ class LoadRVCModelNode:
     def IS_CHANGED(cls, model):
         return get_hash(model)
 
-    def load_model(self, model):
+    def load_model(self, model, index="None"):
+        model_path = file_index = None
         try:
             filename = os.path.basename(model)
             subfolder = os.path.dirname(model)
             model_path = os.path.join(BASE_MODELS_DIR,subfolder,filename)
-
+            
             if not os.path.isfile(model_path):
                 download_link = f"{RVC_DOWNLOAD_LINK}{model}"
-                params = model_path, download_link
-                if download_file(params): print(f"successfully downloaded: {model_path}")
-            model = lambda:get_vc(model_path)
-            return (model,filename.split(".")[0])
+                if download_file((model_path, download_link)): print(f"successfully downloaded: {model_path}")
+
+            if not index=="None":
+                file_index = os.path.join(BASE_MODELS_DIR,subfolder,".index",os.path.basename(index))
+                if not os.path.isfile(file_index):
+                    download_link = f"{RVC_DOWNLOAD_LINK}{index}"
+                    if download_file((file_index, download_link)): print(f"successfully downloaded: {file_index}")
         except Exception as e:
             print(f"Error in {self.__class__.__name__}: {e}")
             raise e
+        finally: return (lambda:get_vc(model_path, file_index),filename.split(".")[0])
     
 class LoadWhisperModelNode:
 

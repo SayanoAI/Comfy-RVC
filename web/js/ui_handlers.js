@@ -303,7 +303,7 @@ function addUploadWidget(nodeType, nodeData, widgetName, type="video") {
         } else if (type == "audio") {
             Object.assign(fileInput, {
                 type: "file",
-                accept: "audio/mpeg,audio/wav,audio/x-wav,audio/ogg",
+                accept: "audio/mpeg,audio/wav,audio/x-wav,audio/ogg,audio/flac",
                 style: "display: none",
                 onchange: async () => {
                     if (fileInput.files.length) {

@@ -50,11 +50,11 @@ class FeatureExtractor:
             gc_collect()
 
     def load_index(self, file_index):
+        index = big_npy = None
         try:
-            if not type(file_index)==str: # loading file index to save time
+            if type(file_index)==tuple: # loading file index to save time
                     print("Using preloaded file index.")
-                    index = file_index
-                    big_npy = index.reconstruct_n(0, index.ntotal)
+                    index,big_npy = file_index
             elif file_index == "":
                 print("File index was empty.")
                 index = None
@@ -70,9 +70,7 @@ class FeatureExtractor:
                 big_npy = index.reconstruct_n(0, index.ntotal)
         except Exception as e:
             print(f"Could not open Faiss index file for reading. {e}")
-            index = None
-            big_npy = None
-        return index, big_npy
+        finally: return index, big_npy
     
     # Fork Feature: Compute f0 with the crepe method
     def get_f0_crepe_computation(
@@ -195,13 +193,6 @@ class FeatureExtractor:
             self.model_rmvpe = RMVPE(os.path.join(BASE_MODELS_DIR,f"rmvpe.{'onnx' if self.onnx else 'pt'}"), is_half=self.is_half, device=self.device, onnx=self.onnx)
 
         return self.model_rmvpe.infer_from_audio(x, thred=0.03)
-        # else:
-        #     f0 = self.model_rmvpe.infer_from_audio(x, thred=0.03)
-        #     if "privateuseone" in str(self.device):
-        #             del self.model_rmvpe.model
-        #             del self.model_rmvpe
-        #             print("cleaning ortruntime memory")
-        #     return f0
 
     def get_pitch_dependant_rmvpe(self, x, f0_min=1, f0_max=40000, *args, **kwargs):
         if not hasattr(self,"model_rmvpe"):

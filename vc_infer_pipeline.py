@@ -204,7 +204,7 @@ class VC(FeatureExtractor):
         
         return audio_opt
 
-def get_vc(model_path,config=config,device=None):
+def get_vc(model_path,file_index=None,config=config,device=None):
     cpt = torch.load(model_path, map_location="cpu")
     tgt_sr = cpt["config"][-1]
     cpt["config"][-3] = cpt["weight"]["emb_g.weight"].shape[0]  # n_spk
@@ -234,28 +234,25 @@ def get_vc(model_path,config=config,device=None):
     else:
         net_g = net_g.float()
     vc = VC(tgt_sr, config)
-    # hubert_model = load_hubert(hubert_path,config)
     model_name = os.path.basename(model_path).split(".")[0]
-    index_files = get_filenames(root=os.path.join(BASE_MODELS_DIR,"RVC"),folder=".index",exts=["index"],name_filters=[model_name])
-
+    
     try: #preload file_index
-        if len(index_files)==0:
-            print("File index was empty.")
-            file_index = None
-        else:
+        if os.path.exists(file_index):
             import faiss
-            file_index = index_files.pop()
-            if os.path.exists(file_index):
-                sys.stdout.write(f"Attempting to load {file_index}....\n")
-                sys.stdout.flush()
-            else:
-                sys.stdout.write(f"Attempting to load {file_index}.... (despite it not existing)\n")
-                sys.stdout.flush()
-            file_index = faiss.read_index(file_index)
-            sys.stdout.write(f"loaded index: {file_index}\n")
+            sys.stdout.write(f"Attempting to load {file_index}....\n")
+            sys.stdout.flush()
+            index = faiss.read_index(file_index)
+            big_npy = index.reconstruct_n(0, index.ntotal)
+            file_index = index, big_npy
+        else:
+            sys.stdout.write(f"Attempting to load {file_index}.... (despite it not existing)\n")
+            sys.stdout.flush()
+            file_index = ""
+        
+        sys.stdout.write(f"loaded index: {file_index}\n")
     except Exception as e:
         print(f"Could not open Faiss index file for reading. {e}")
-        file_index = None
+        file_index = ""
 
     return {"vc": vc, "cpt": cpt, "net_g": net_g, "model_name": model_name,
             "file_index": file_index, "sr": cpt["config"][-1]}
@@ -287,7 +284,6 @@ def vc_single(
 ):
     print(f"vc_single unused args: {kwargs}")
     if hubert_model == None:
-        assert hubert_path is not None
         hubert_model = load_hubert(hubert_path,config)
 
     if not (cpt and net_g and vc and hubert_model):
