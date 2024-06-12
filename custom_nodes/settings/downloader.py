@@ -1,4 +1,6 @@
+import platform
 import re
+import subprocess
 from typing import IO, List, Tuple
 import unicodedata
 import requests
@@ -31,7 +33,7 @@ RVC_INDEX = [
     "RVC/.index/added_IVF985_Flat_nprobe_1_Fuji_v2.index",
     "RVC/.index/Monika_v2_40k.index"
 ]
-BASE_MODELS = ["hubert_base.pt", "rmvpe.pt"]
+BASE_MODELS = ["content-vec-best.safetensors", "rmvpe.pt"]
 VITS_MODELS = ["VITS/pretrained_ljs.pth"]
 PRETRAINED_MODELS = [
     "pretrained_v2/D48k.pth",
@@ -133,3 +135,13 @@ def slugify_filepath(filepath):
     filename = re.sub(r'[^a-z0-9.-]+', '-', filename)
     # Join the directory and the slugified filename
     return os.path.join(directory, filename)
+
+def download_ffmpeg():
+    if platform.system() == "Windows":
+        link = f"{RVC_DOWNLOAD_LINK}ffmpeg.exe"
+        ffmpeg_path = os.path.join(os.getcwd(),"ffmpeg.exe")
+        if os.path.isfile(ffmpeg_path): return True
+        return download_file((ffmpeg_path, link))
+    elif platform.system() == "Linux":
+        subprocess.check_call("apt update && apt install -y -qq ffmpeg espeak")
+        return True
