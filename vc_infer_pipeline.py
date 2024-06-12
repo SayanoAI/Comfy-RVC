@@ -11,9 +11,8 @@ from .lib.model_utils import load_hubert, change_rms
 from .pitch_extraction import FeatureExtractor
 
 from .lib.audio import MAX_INT16, load_input_audio, remix_audio
-from .lib import BASE_MODELS_DIR
 from .config import config
-from .lib.utils import gc_collect, get_filenames
+from .lib.utils import gc_collect
 
 # torchcrepe = lazyload("torchcrepe")  # Fork Feature. Crepe algo for training and preprocess
 # torch = lazyload("torch")
@@ -54,10 +53,10 @@ class VC(FeatureExtractor):
             "padding_mask": padding_mask,
             "output_layer": 9 if version == "v1" else 12,
         }
-        
-        with torch.no_grad():
-            logits = model.extract_features(**inputs)
-            feats = model.final_proj(logits[0]) if version == "v1" else logits[0]
+        feats = model.extract_features(version=version,**inputs)
+        # with torch.no_grad():
+        #     logits = model.extract_features(**inputs)
+        #     feats = model.final_proj(logits[0]) if version == "v1" else logits[0]
         if protect < 0.5 and pitch is not None and pitchf is not None:
             feats0 = feats.clone()
         if index is not None and big_npy is not None and index_rate > 0:

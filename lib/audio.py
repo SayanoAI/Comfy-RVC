@@ -1,9 +1,8 @@
 import base64
 import io
 import os
-from typing import Union
 import zlib
-from .utils import get_hash, get_merge_func
+from .utils import get_merge_func
 import numpy as np
 import librosa
 import soundfile as sf
@@ -40,8 +39,8 @@ def load_audio(file, sr, **kwargs):
             .output("-", format="f32le", acodec="pcm_f32le", ac=1, ar=sr)
             .run(cmd=["ffmpeg", "-nostdin"], capture_stdout=True, capture_stderr=True)
         )
-    except Exception as e:
-        raise RuntimeError(f"Failed to load audio: {e}")
+    except Exception as error:
+        raise RuntimeError(f"Failed to load audio: {error=} {file=}")
 
     return remix_audio((np.frombuffer(out, np.float32).flatten(), sr),**kwargs)
 

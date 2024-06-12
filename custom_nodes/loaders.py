@@ -88,10 +88,10 @@ class LoadPitchExtractionParams:
 class LoadHubertModel:
     @classmethod
     def INPUT_TYPES(cls):
-        model_list = ["hubert_base.pt"] + get_filenames(root=BASE_MODELS_DIR,folder="*",exts=["pt"],format_func=os.path.basename)
+        model_list = ["content-vec-best.safetensors"] + get_filenames(root=BASE_MODELS_DIR,folder="*",exts=["pt","safetensors"],format_func=os.path.basename)
         return {
             'required': {
-                'model': (model_list,{"default": "hubert_base.pt"}),
+                'model': (model_list,{"default": "content-vec-best.safetensors"}),
             },
         }
 
@@ -253,7 +253,7 @@ class LoadAudio:
     FUNCTION = "load_audio"
 
     def load_audio(self, audio, sr):
-        audio_path = folder_paths.get_annotated_filepath(audio)
+        audio_path = os.path.join(input_path,audio) #folder_paths.get_annotated_filepath(audio)
         widgetId = get_hash(audio_path)
         audio_name = os.path.basename(audio).split(".")[0]
         sr = None if sr=="None" else int(sr)
@@ -262,15 +262,13 @@ class LoadAudio:
 
     @classmethod
     def IS_CHANGED(cls, audio):
-        audio_path = folder_paths.get_annotated_filepath(audio)
+        audio_path = os.path.join(input_path,audio)
         print(f"{audio_path=}")
         return get_file_hash(audio_path)
     
 class DownloadAudio:
     @classmethod
     def INPUT_TYPES(cls):
-        input_dir = input_path
-        files = get_filenames(root=input_dir,exts=SUPPORTED_AUDIO,format_func=os.path.basename)
         
         return {
             "required": {

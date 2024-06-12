@@ -1,9 +1,10 @@
 
 import hashlib
-import os
 import torch.nn.functional as F
 import librosa
 import torch
+
+from .infer_pack.loaders import HubertModelWithFinalProj
 
 def get_hash(model_path):
     try:
@@ -15,18 +16,21 @@ def get_hash(model_path):
 
     return model_hash
 
-def load_hubert(model_path,config):
+def load_hubert(model_path: str, config):
     try:
-        from fairseq import checkpoint_utils
-        models, _, _ = checkpoint_utils.load_model_ensemble_and_task([model_path],suffix="",)
-        hubert_model = models[0]
-        hubert_model = hubert_model.to(config.device)
-        if config.is_half:
-            hubert_model = hubert_model.half()
+        if model_path.endswith(".safetensors"):
+            return HubertModelWithFinalProj.load_safetensors(model_path, device=config.device)
         else:
-            hubert_model = hubert_model.float()
-        hubert_model.eval()
-        return hubert_model
+            from fairseq import checkpoint_utils
+            models, _, _ = checkpoint_utils.load_model_ensemble_and_task([model_path],suffix="",)
+            hubert_model = models[0]
+            hubert_model = hubert_model.to(config.device)
+            if config.is_half:
+                hubert_model = hubert_model.half()
+            else:
+                hubert_model = hubert_model.float()
+            hubert_model.eval()
+            return hubert_model
     except Exception as e:
         print(e)
         return None

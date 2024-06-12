@@ -1,61 +1,7 @@
 {
-  "last_node_id": 50,
-  "last_link_id": 159,
+  "last_node_id": 54,
+  "last_link_id": 168,
   "nodes": [
-    {
-      "id": 31,
-      "type": "JoinStrings",
-      "pos": [
-        1394,
-        -786
-      ],
-      "size": {
-        "0": 315,
-        "1": 106
-      },
-      "flags": {
-        "collapsed": true
-      },
-      "order": 6,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "string1",
-          "type": "STRING",
-          "link": 66,
-          "widget": {
-            "name": "string1"
-          }
-        },
-        {
-          "name": "string2",
-          "type": "STRING",
-          "link": 138,
-          "widget": {
-            "name": "string2"
-          }
-        }
-      ],
-      "outputs": [
-        {
-          "name": "STRING",
-          "type": "STRING",
-          "links": [
-            64
-          ],
-          "shape": 3,
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "JoinStrings"
-      },
-      "widgets_values": [
-        "",
-        "",
-        "\\"
-      ]
-    },
     {
       "id": 37,
       "type": "RVCNode",
@@ -124,154 +70,7 @@
           "hidden": false,
           "paused": false,
           "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
         }
-      ]
-    },
-    {
-      "id": 49,
-      "type": "DownloadAudio",
-      "pos": [
-        -538,
-        -794
-      ],
-      "size": [
-        315,
-        126
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "audio_name",
-          "type": "STRING",
-          "links": [
-            138
-          ],
-          "shape": 3,
-          "slot_index": 0
-        },
-        {
-          "name": "vhs_audio",
-          "type": "VHS_AUDIO",
-          "links": [
-            136,
-            137
-          ],
-          "shape": 3,
-          "slot_index": 1
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "DownloadAudio"
-      },
-      "widgets_values": [
-        "https://www.youtube.com/watch?v=DSnJ76vPi_8",
-        "None",
-        "Monologue of Three",
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        }
-      ]
-    },
-    {
-      "id": 5,
-      "type": "LoadHubertModel",
-      "pos": [
-        1010,
-        -145
-      ],
-      "size": {
-        "0": 315,
-        "1": 58
-      },
-      "flags": {
-        "collapsed": true
-      },
-      "order": 1,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "hubert_model",
-          "type": "HUBERT_MODEL",
-          "links": [
-            58
-          ],
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadHubertModel"
-      },
-      "widgets_values": [
-        "hubert_base.pt"
       ]
     },
     {
@@ -286,7 +85,7 @@
         "1": 178
       },
       "flags": {},
-      "order": 2,
+      "order": 0,
       "mode": 0,
       "outputs": [
         {
@@ -308,46 +107,6 @@
         0,
         0.25,
         0.25
-      ]
-    },
-    {
-      "id": 4,
-      "type": "LoadRVCModelNode",
-      "pos": [
-        953,
-        -97
-      ],
-      "size": {
-        "0": 315,
-        "1": 78
-      },
-      "flags": {},
-      "order": 3,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "model",
-          "type": "RVC_MODEL",
-          "links": [
-            57
-          ],
-          "shape": 3
-        },
-        {
-          "name": "model_name",
-          "type": "STRING",
-          "links": [
-            66
-          ],
-          "shape": 3,
-          "slot_index": 1
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadRVCModelNode"
-      },
-      "widgets_values": [
-        "RVC/Sayano.pth"
       ]
     },
     {
@@ -404,31 +163,6 @@
         "None",
         "median",
         false,
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
         {
           "hidden": false,
           "paused": false,
@@ -503,31 +237,6 @@
           "hidden": false,
           "paused": false,
           "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
         }
       ]
     },
@@ -543,13 +252,13 @@
         "1": 170
       },
       "flags": {},
-      "order": 5,
+      "order": 6,
       "mode": 0,
       "inputs": [
         {
           "name": "audio",
           "type": "VHS_AUDIO",
-          "link": 137
+          "link": 163
         }
       ],
       "outputs": [
@@ -603,7 +312,7 @@
         {
           "name": "audio1",
           "type": "VHS_AUDIO",
-          "link": 158
+          "link": 167
         },
         {
           "name": "audio2",
@@ -649,89 +358,7 @@
           "hidden": false,
           "paused": false,
           "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
         }
-      ]
-    },
-    {
-      "id": 14,
-      "type": "UVR5Node",
-      "pos": [
-        179,
-        -579
-      ],
-      "size": {
-        "0": 315,
-        "1": 170
-      },
-      "flags": {},
-      "order": 9,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "audio",
-          "type": "VHS_AUDIO",
-          "link": 99
-        }
-      ],
-      "outputs": [
-        {
-          "name": "primary_stem",
-          "type": "VHS_AUDIO",
-          "links": [
-            156
-          ],
-          "shape": 3,
-          "slot_index": 0
-        },
-        {
-          "name": "secondary_stem",
-          "type": "VHS_AUDIO",
-          "links": [
-            157
-          ],
-          "shape": 3,
-          "slot_index": 1
-        },
-        {
-          "name": "audio_passthrough",
-          "type": "VHS_AUDIO",
-          "links": null,
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "UVR5Node"
-      },
-      "widgets_values": [
-        "karafan/MDX23C-8KFFT-InstVoc_HQ.ckpt",
-        10,
-        10,
-        "flac"
       ]
     },
     {
@@ -787,63 +414,6 @@
       "widgets_values": [
         "UVR/HP5-vocals+instrumentals.pth",
         true,
-        10,
-        "flac"
-      ]
-    },
-    {
-      "id": 7,
-      "type": "UVR5Node",
-      "pos": [
-        173,
-        -800
-      ],
-      "size": {
-        "0": 315,
-        "1": 170
-      },
-      "flags": {},
-      "order": 8,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "audio",
-          "type": "VHS_AUDIO",
-          "link": 98
-        }
-      ],
-      "outputs": [
-        {
-          "name": "primary_stem",
-          "type": "VHS_AUDIO",
-          "links": [
-            158
-          ],
-          "shape": 3,
-          "slot_index": 0
-        },
-        {
-          "name": "secondary_stem",
-          "type": "VHS_AUDIO",
-          "links": [
-            159
-          ],
-          "shape": 3,
-          "slot_index": 1
-        },
-        {
-          "name": "audio_passthrough",
-          "type": "VHS_AUDIO",
-          "links": null,
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "UVR5Node"
-      },
-      "widgets_values": [
-        "UVR/model_bs_roformer_ep_317_sdr_12.9755.ckpt",
-        10,
         10,
         "flac"
       ]
@@ -918,36 +488,6 @@
           "hidden": false,
           "paused": false,
           "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
         }
       ]
     },
@@ -963,13 +503,13 @@
         "1": 170
       },
       "flags": {},
-      "order": 4,
+      "order": 5,
       "mode": 0,
       "inputs": [
         {
           "name": "audio",
           "type": "VHS_AUDIO",
-          "link": 136
+          "link": 162
         }
       ],
       "outputs": [
@@ -1024,7 +564,7 @@
         {
           "name": "audio1",
           "type": "VHS_AUDIO",
-          "link": 159
+          "link": 166
         },
         {
           "name": "audio2",
@@ -1061,36 +601,6 @@
         "None",
         "min",
         true,
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
         {
           "hidden": false,
           "paused": false,
@@ -1163,31 +673,6 @@
         "None",
         "median",
         true,
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
         {
           "hidden": false,
           "paused": false,
@@ -1370,6 +855,297 @@
         10,
         "flac"
       ]
+    },
+    {
+      "id": 4,
+      "type": "LoadRVCModelNode",
+      "pos": [
+        956,
+        -118
+      ],
+      "size": {
+        "0": 315,
+        "1": 102
+      },
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "model",
+          "type": "RVC_MODEL",
+          "links": [
+            57
+          ],
+          "shape": 3
+        },
+        {
+          "name": "model_name",
+          "type": "STRING",
+          "links": [
+            66
+          ],
+          "shape": 3,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadRVCModelNode"
+      },
+      "widgets_values": [
+        "RVC/Sayano.pth",
+        "RVC/.index/added_IVF1063_Flat_nprobe_1_Sayano_v2.index"
+      ]
+    },
+    {
+      "id": 5,
+      "type": "LoadHubertModel",
+      "pos": [
+        1011,
+        -156
+      ],
+      "size": {
+        "0": 315,
+        "1": 58
+      },
+      "flags": {
+        "collapsed": true
+      },
+      "order": 2,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "hubert_model",
+          "type": "HUBERT_MODEL",
+          "links": [
+            58
+          ],
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadHubertModel"
+      },
+      "widgets_values": [
+        "content-vec-best.safetensors"
+      ]
+    },
+    {
+      "id": 14,
+      "type": "UVR5Node",
+      "pos": [
+        179,
+        -579
+      ],
+      "size": {
+        "0": 315,
+        "1": 170
+      },
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "VHS_AUDIO",
+          "link": 99
+        }
+      ],
+      "outputs": [
+        {
+          "name": "primary_stem",
+          "type": "VHS_AUDIO",
+          "links": [
+            156
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "secondary_stem",
+          "type": "VHS_AUDIO",
+          "links": [
+            157
+          ],
+          "shape": 3,
+          "slot_index": 1
+        },
+        {
+          "name": "audio_passthrough",
+          "type": "VHS_AUDIO",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UVR5Node"
+      },
+      "widgets_values": [
+        "UVR/model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+        10,
+        10,
+        "flac"
+      ]
+    },
+    {
+      "id": 7,
+      "type": "UVR5Node",
+      "pos": [
+        173,
+        -800
+      ],
+      "size": {
+        "0": 315,
+        "1": 170
+      },
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "VHS_AUDIO",
+          "link": 98
+        }
+      ],
+      "outputs": [
+        {
+          "name": "primary_stem",
+          "type": "VHS_AUDIO",
+          "links": [
+            166
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "secondary_stem",
+          "type": "VHS_AUDIO",
+          "links": [
+            167
+          ],
+          "shape": 3,
+          "slot_index": 1
+        },
+        {
+          "name": "audio_passthrough",
+          "type": "VHS_AUDIO",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UVR5Node"
+      },
+      "widgets_values": [
+        "karafan/MDX23C-8KFFT-InstVoc_HQ.ckpt",
+        10,
+        10,
+        "flac"
+      ]
+    },
+    {
+      "id": 53,
+      "type": "LoadAudio",
+      "pos": [
+        -501,
+        -799
+      ],
+      "size": [
+        210,
+        126
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "audio_name",
+          "type": "STRING",
+          "links": [
+            168
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "vhs_audio",
+          "type": "VHS_AUDIO",
+          "links": [
+            162,
+            163
+          ],
+          "shape": 3,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "Monologue of Three.mp3",
+        "None",
+        "image",
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "JoinStrings",
+      "pos": [
+        1379,
+        -786
+      ],
+      "size": {
+        "0": 315,
+        "1": 106
+      },
+      "flags": {
+        "collapsed": true
+      },
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "string1",
+          "type": "STRING",
+          "link": 66,
+          "widget": {
+            "name": "string1"
+          }
+        },
+        {
+          "name": "string2",
+          "type": "STRING",
+          "link": 168,
+          "widget": {
+            "name": "string2"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            64
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "JoinStrings"
+      },
+      "widgets_values": [
+        "",
+        "",
+        "\\"
+      ]
     }
   ],
   "links": [
@@ -1486,30 +1262,6 @@
       "VHS_AUDIO"
     ],
     [
-      136,
-      49,
-      1,
-      11,
-      0,
-      "VHS_AUDIO"
-    ],
-    [
-      137,
-      49,
-      1,
-      44,
-      0,
-      "VHS_AUDIO"
-    ],
-    [
-      138,
-      49,
-      0,
-      31,
-      1,
-      "STRING"
-    ],
-    [
       141,
       47,
       0,
@@ -1582,20 +1334,44 @@
       "VHS_AUDIO"
     ],
     [
-      158,
+      162,
+      53,
+      1,
+      11,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      163,
+      53,
+      1,
+      44,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      166,
       7,
       0,
+      50,
+      0,
+      "VHS_AUDIO"
+    ],
+    [
+      167,
+      7,
+      1,
       36,
       0,
       "VHS_AUDIO"
     ],
     [
-      159,
-      7,
-      1,
-      50,
+      168,
+      53,
       0,
-      "VHS_AUDIO"
+      31,
+      1,
+      "STRING"
     ]
   ],
   "groups": [
@@ -1647,10 +1423,10 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.6830134553650706,
+      "scale": 0.9090909090909091,
       "offset": [
-        -663.7036134395787,
-        1119.9858379127336
+        -959.9219208282357,
+        981.1146284125558
       ]
     }
   },
