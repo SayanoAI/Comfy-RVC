@@ -19,7 +19,7 @@ def get_hash(model_path):
 def load_hubert(model_path: str, config):
     try:
         if model_path.endswith(".safetensors"):
-            return HubertModelWithFinalProj.load_safetensors(model_path, device=config.device)
+            return HubertModelWithFinalProj.from_safetensors(model_path, device=config.device)
         else:
             from fairseq import checkpoint_utils
             models, _, _ = checkpoint_utils.load_model_ensemble_and_task([model_path],suffix="",)
