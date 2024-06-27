@@ -1,4 +1,4 @@
-from .custom_nodes.stt import AudioTranscriptionNode
+from .custom_nodes.stt import AudioTranscriptionNode, BatchedTranscriptionEncoderNode
 from .custom_nodes.uvr import UVR5Node
 from .custom_nodes.rvc import RVCNode
 from .custom_nodes.loaders import DownloadAudio, LoadAudio, LoadWhisperModelNode, LoadRVCModelNode, LoadHubertModel, LoadPitchExtractionParams
@@ -26,7 +26,8 @@ NODE_CLASS_MAPPINGS = {
     "MergeLatentBatches": MergeLatentBatches,
     "ImageRepeatInterleavedNode": ImageRepeatInterleavedNode,
     "LatentRepeatInterleavedNode": LatentRepeatInterleavedNode,
-    "DownloadAudio": DownloadAudio
+    "DownloadAudio": DownloadAudio,
+    "BatchedTranscriptionEncoderNode": BatchedTranscriptionEncoderNode
 }
 
 # A dictionary that contains the friendly/humanly readable titles for the nodes
@@ -46,5 +47,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MergeImageBatches": "🌺Merge Image Batches",
     "MergeLatentBatches": "🌺Merge Latent Batches",
     "ImageRepeatInterleavedNode": "🌺Image Repeat Interleaved",
-    "LatentRepeatInterleavedNode": "🌺Latent Repeat Interleaved"
+    "LatentRepeatInterleavedNode": "🌺Latent Repeat Interleaved",
+    "BatchedTranscriptionEncoderNode": "🌺Batched CLIP Transcription Encode (Prompt)"
 }

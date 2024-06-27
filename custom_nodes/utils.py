@@ -150,7 +150,7 @@ class AudioBatchValueNode:
         return {
             "required": {
                 "audio": ('VHS_AUDIO',),
-                "num_frames": ('INT', {"min": 1, "max": 128, "step": 1}),
+                "num_segments": ('INT', {"min": 1, "max": 128, "step": 1, "forceInput": True}),
                 "output_min": ('FLOAT', {'default': 0., "min": -1000., "max": 1000., "step": .01}),
                 "output_max": ('FLOAT', {'default': 1., "min": 0., "max": 1000., "step": .01}),
                 "norm": (["scale","tanh","sigmoid"], {"default": "scale"}),
@@ -163,8 +163,8 @@ class AudioBatchValueNode:
             }
         }
 
-    RETURN_TYPES = ("STRING","INT")
-    RETURN_NAMES = ("batch_value_text","num_values")
+    RETURN_TYPES = ("FLOAT","INT","INT")
+    RETURN_NAMES = ("FLOAT","INT","num_values")
 
     FUNCTION = "get_frame_weights"
 
@@ -174,13 +174,13 @@ class AudioBatchValueNode:
     def get_rms(audio): # root mean squared of audio segment
         return np.sqrt(np.nanmean(audio**2))
 
-    def get_frame_weights(self, audio, num_frames, output_min, output_max, norm,
+    def get_frame_weights(self, audio, num_segments, output_min, output_max, norm,
                           silence_threshold=1000, frame_multiplier=1, print_output=False, inverse=False):
         assert output_max>=output_min, f"{output_max=} must be greater or equal to {output_min=}!"
 
         audio_data = bytes_to_audio(audio())
         audio,_ = remix_audio(audio_data,norm=True,to_int16=True)
-        num_values = int(num_frames*frame_multiplier)
+        num_values = int(num_segments*frame_multiplier)
         audio_rms = np.nan_to_num(list(map(self.get_rms,np.array_split(audio.flatten()/silence_threshold, num_values))),nan=0)
         audio_zscore = (audio_rms-audio_rms.mean())/audio_rms.std()
         output_range = output_max-output_min
@@ -203,7 +203,7 @@ class AudioBatchValueNode:
 
         batch_value = ",\n".join([f'{n}:({v})' for n,v in enumerate(x_norm)])
         if print_output: pprint(batch_value)
-        return (batch_value,num_values)
+        return (list(x_norm),list(map(int,x_norm)),num_values)
     
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):

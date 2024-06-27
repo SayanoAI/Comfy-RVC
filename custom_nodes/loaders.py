@@ -1,7 +1,5 @@
 from io import BytesIO
 import os
-import subprocess
-import sys
 from pytube import YouTube
 from .settings import PITCH_EXTRACTION_OPTIONS
 from ..lib import BASE_MODELS_DIR
@@ -35,12 +33,6 @@ model_ids = [
 ]
 
 languages = ['en', 'fr', 'es']
-
-spacy_model_map = {
-    "en": "en_core_web_md",
-    "fr": "fr_core_news_md",
-    "es": "es_core_news_md"
-}
 
 class LoadPitchExtractionParams:
     @classmethod
@@ -88,7 +80,9 @@ class LoadPitchExtractionParams:
 class LoadHubertModel:
     @classmethod
     def INPUT_TYPES(cls):
-        model_list = ["content-vec-best.safetensors"] + get_filenames(root=BASE_MODELS_DIR,folder="*",exts=["pt","safetensors"],format_func=os.path.basename)
+        model_list = ["content-vec-best.safetensors"] + get_filenames(root=BASE_MODELS_DIR,folder=".",exts=["pt","safetensors"],format_func=os.path.basename)
+        model_list = list(set(model_list)) # dedupe
+        
         return {
             'required': {
                 'model': (model_list,{"default": "content-vec-best.safetensors"}),
@@ -170,7 +164,6 @@ class LoadWhisperModelNode:
                 'model_id': (model_ids,{"default": "openai/whisper-base.en"}),
             },
             "optional": {
-                'language': (languages,{"default": "en"}),
                 "max_new_tokens": ("INT", {"default": 128, "min": 16, "max": 1024, "display": "slider"}),
                 "chunk_length_s": ("INT", {"default": 30, "min": 15, "max": 60, "display": "slider"}),
                 "batch_size": ("INT", {"default": 16, "min": 1, "max": 128, "display": "slider"}),
@@ -188,7 +181,7 @@ class LoadWhisperModelNode:
     def IS_CHANGED(cls, model):
         return get_hash(model)
 
-    def load_model(self, model_id, language="en", max_new_tokens=128, chunk_length_s=12, batch_size=16):
+    def load_model(self, model_id, max_new_tokens=128, chunk_length_s=12, batch_size=16):
         device = get_optimal_torch_device()
         torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
@@ -198,28 +191,9 @@ class LoadWhisperModelNode:
         processor = AutoProcessor.from_pretrained(model_id)
         model.to(device)
 
-        generate_kwargs = {}
-        if model_id.endswith('.en'):
-            if language != 'en':
-                raise ValueError(f'Model {model_id} only supports English language')
-        else:
-            generate_kwargs['language'] = language
+        # generate_kwargs = {}
 
-        def pipe():
-            
-            def get_spacy_model():
-                import spacy
-                model_name = spacy_model_map[language]
-                model_path = os.path.join(BASE_MODELS_DIR,model_name)
-                
-                if not os.path.exists(model_path):
-                    subprocess.call([sys.executable, "-m", "spacy", "download", model_name])
-                    model = spacy.load(model_name)
-                    model.to_disk(model_path)
-
-                return spacy.load(model_path)
-                
-            return pipeline(
+        def pipe(): return pipeline(
                 'automatic-speech-recognition',
                 model=model,
                 tokenizer=processor.tokenizer,
@@ -230,9 +204,9 @@ class LoadWhisperModelNode:
                 return_timestamps=True,
                 torch_dtype=torch_dtype,
                 device=device,
-                generate_kwargs=generate_kwargs,
-            ),get_spacy_model
-        return (pipe, )
+                # generate_kwargs=generate_kwargs,
+            )
+        return ([pipe,model_id], )
 
 class LoadAudio:
     @classmethod
