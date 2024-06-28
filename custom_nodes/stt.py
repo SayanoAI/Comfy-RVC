@@ -20,8 +20,17 @@ from textacy.extract import keyterms as kt
 temp_path = folder_paths.get_temp_directory()
 CATEGORY = "🌺RVC-Studio/stt"
 
-def extract_keywords(text: str, max_words: int, spacy_model, prefix="", suffix="", **kwargs):
+def extract_keywords(text: str, max_words: int, spacy_model, use_sentiment=False, prefix="", suffix="", **kwargs):
     text = text.strip()
+    sentiment = ""
+    if use_sentiment:
+        from spacytextblob.spacytextblob import SpacyTextBlob
+        doc = spacy_model(text)
+        polarity = SpacyTextBlob(spacy_model).get_polarity(doc)
+        if polarity<-.5: sentiment="sad, tears"
+        elif polarity<-.2: sentiment="sad"
+        elif polarity>.5: sentiment="happy, smile"
+        elif polarity>.2: sentiment="slight smile"
     doc = textacy.make_spacy_doc(text, lang=spacy_model)
     topn = int(max_words) if max_words>0 else len(text)
     include_pos = ["NOUN","ADJ","PROPN","VERB","NUM","ADP"]
@@ -33,14 +42,23 @@ def extract_keywords(text: str, max_words: int, spacy_model, prefix="", suffix="
     except Exception as error:
         print(f"{text=} {error=}")
 
-    return ", ".join(filter(None,[prefix,*tags,suffix])).strip()
+    return ", ".join(filter(None,[prefix,*tags,sentiment,suffix])).strip()
 
-def limit_sentence(text: str, max_words: int, prefix="", suffix="", **kwargs):
+def limit_sentence(text: str, max_words: int, spacy_model, use_sentiment=False, prefix="", suffix="", **kwargs):
     text = text.strip()
+    sentiment = ""
+    if use_sentiment:
+        from spacytextblob.spacytextblob import SpacyTextBlob
+        doc = spacy_model(text)
+        polarity = SpacyTextBlob(spacy_model).get_polarity(doc)
+        if polarity<-.5: sentiment="sad, tears"
+        elif polarity<-.2: sentiment="sad"
+        elif polarity>.5: sentiment="happy, smile"
+        elif polarity>.2: sentiment="slight smile"
     topn = int(max_words) if max_words>0 else len(text)
     if topn>0: text = " ".join(text.split()[:topn])
-    
-    return ", ".join(filter(None,[prefix,text,suffix])).strip()
+        
+    return ", ".join(filter(None,[prefix,text,sentiment,suffix])).strip()
 
 class AudioTranscriptionNode:
     def __init__(self):
@@ -135,13 +153,14 @@ class BatchedTranscriptionEncoderNode:
         return {
             "required": {
                 "transcription": ('TRANSCRIPTION',),
-                "num_frames": ('INT', {'forceInput': True,}),
                 "clip": ('CLIP',)
             },
             "optional": {
                 "loop": ('BOOLEAN', {'default': False}),
                 "use_tags": ('BOOLEAN', {'default': False}),
+                "use_sentiment": ('BOOLEAN', {'default': False}),
                 'language': (SUPPORTED_LANGUAGES,{"default": "en"}),
+                "max_chunks": ('INT', {"min": 2, "default": None}),
                 "max_words": ('INT', {'default': 16, "min": 0, "max": 32, "display": "slider"}),
                 "frame_interpolation": ("INT", {"default": 0, "min": 0, "max": 120}),
                 "prefix": ("STRING", {"default": "masterpiece, best quality", "multiline": True, "forceInput": True}),
@@ -159,16 +178,14 @@ class BatchedTranscriptionEncoderNode:
     CATEGORY = CATEGORY
 
     @staticmethod
-    def process_text_chunks(ichunk,text_processor,frame_interpolation,clip,**kwargs):
+    def process_text_chunks(ichunk,frame_interpolation,clip,*,use_tags,**kwargs):
         i,chunk=ichunk
         frame_interpolation=int(frame_interpolation)
+        text_processor = extract_keywords if use_tags else limit_sentence
         text = text_processor(chunk["text"],**kwargs)
         timestamp = np.nan_to_num(np.array(chunk["timestamp"],dtype=float),nan=i)
-        # index = int(timestamp[0]*frame_interpolation) if frame_interpolation>0 else i
-        # prompt = f'"{index}":"{text}"' if len(text) else f'"{index}":""'
         duration = max(abs(int(np.round(timestamp[1]-timestamp[0]))),1) # at least 1 sec duration
         if frame_interpolation>1: duration*=frame_interpolation
-        # value = f'"{index}":"({duration})"'
         tokens = clip.tokenize(text)
         cond, pooled = clip.encode_from_tokens(tokens, return_pooled=True)
         
@@ -192,15 +209,18 @@ class BatchedTranscriptionEncoderNode:
             model = spacy.load(model_name)
             model.to_disk(model_path)
 
-        return spacy.load(model_path)
+        model = spacy.load(model_path)
+
+        return model
 
     def get_prompt(
-        self, transcription, num_frames, clip, language="en", loop=False, use_tags=False, max_words=16,
-        frame_interpolation=0, print_output=True, prefix="", suffix=""
+        self, transcription, clip, language="en", loop=False, use_tags=False, use_sentiment=False,
+        max_words=16,max_chunks=None, frame_interpolation=0, print_output=True, prefix="", suffix=""
     ):
 
-        print('Transcription Done')
-        total_chunks = transcription['chunks']
+        if not max_chunks: max_chunks = len(transcription['chunks'])
+        total_chunks = transcription['chunks'][:max_chunks]
+        num_frames = max(max_chunks, *filter(None,np.array([chunk["timestamp"] for chunk in transcription['chunks']]).flatten()))
 
         if loop: # append first frame to chunk stack
             last_chunk = None
@@ -210,10 +230,11 @@ class BatchedTranscriptionEncoderNode:
                 if "timestamp" in last_chunk and len(last_chunk["timestamp"])>=1:
                     last_chunk["timestamp"] = np.nan_to_num(np.array(last_chunk["timestamp"],dtype=float),nan=num_frames)
                     break
+
             if last_chunk is not None:
                 timestamp = last_chunk["timestamp"]
                 start_time = timestamp[-1]
-                duration = max(1,num_frames - start_time)
+                duration = max(abs(num_frames - start_time),1)
                 total_chunks.append({
                     "text": total_chunks[0]["text"],
                     "timestamp": (start_time,start_time+duration)
@@ -221,10 +242,7 @@ class BatchedTranscriptionEncoderNode:
         else: # adds 1s frame to prevent audio from stopping early
             num_frames+=1
 
-        if use_tags:
-            spacy_model,text_processor = self.get_spacy_model(language),extract_keywords
-        else:
-            spacy_model,text_processor = None,limit_sentence
+        spacy_model = self.get_spacy_model(language)
 
         # split transcript into prompt based on timestamp
         # find length of each frame using timestamp
@@ -233,7 +251,13 @@ class BatchedTranscriptionEncoderNode:
         cond = []
         pooled = []
         for ichunk in enumerate(total_chunks):
-            t, d, c, pc = self.process_text_chunks(ichunk,text_processor,frame_interpolation,clip,prefix=prefix,suffix=suffix,spacy_model=spacy_model,max_words=max_words)
+            t, d, c, pc = self.process_text_chunks(ichunk,frame_interpolation,clip,
+                                                   use_tags=use_tags,
+                                                   use_sentiment=use_sentiment,
+                                                   prefix=prefix,
+                                                   suffix=suffix,
+                                                   spacy_model=spacy_model,
+                                                   max_words=max_words)
             batch_prompt_text.append(t)
             batch_values_int.append(d)
             cond.append(c)
@@ -246,10 +270,9 @@ class BatchedTranscriptionEncoderNode:
         del pooled, cond
 
         if print_output:
-            pprint(conditioning)
             print(batch_prompt_text)
             print(batch_values_int)
-            print(f"{num_chunks=}, {num_frames=}")
+            print(f"{num_chunks=}, {max_chunks=}, {num_frames=}")
 
         return (conditioning, batch_prompt_text, batch_values_int, num_chunks, num_frames)
     
