@@ -1,4 +1,5 @@
 import itertools
+import math
 import os
 from pprint import pprint
 import re
@@ -129,17 +130,26 @@ class MergeLatentBatches:
 
     @staticmethod
     def merge_tensor(tensors):
-        return torch.cat(tensors, dim=0)
+        try:    
+            if len(tensors): return torch.cat(tensors, dim=0)
+            else: print(tensors)
+        except Exception as error:
+            print(f"{error=}")
+        return []
 
     def merge(self, latents):
-        merged_latents = {}
+        merged_latent = {}
         gc_collect()
-        merged_latents["samples"] = self.merge_tensor([latent["samples"] for latent in latents])
-        merged_latents["noise_mask"] = self.merge_tensor([latent["noise_mask"] for latent in latents])
-        merged_latents["batch_index"] = self.merge_tensor([latent["batch_index"] for latent in latents])
+        merged_latent["samples"] = self.merge_tensor([latent["samples"] for latent in latents])
+        merged_latent["noise_mask"] = self.merge_tensor([latent["noise_mask"] for latent in latents if "noise_mask" in latent])
+        # merged_latent["batch_index"] = self.merge_tensor([latent["batch_index"] for latent in latents if "batch_index" in latent])
+        merged_latent["batch_index"] = range(len(merged_latent["samples"]))
         
-        print(f'Merged latents: {len(merged_latents["samples"])=} {latents["batch_index"]=}')
-        return (merged_latents,)
+        # remove empty fields
+        if merged_latent["noise_mask"]==[]: del merged_latent["noise_mask"]
+
+        print(f'Merged latents: {len(merged_latent["samples"])=} {merged_latent["batch_index"]=}')
+        return (merged_latent,)
         
 class AudioBatchValueNode:
     def __init__(self):
@@ -205,10 +215,6 @@ class AudioBatchValueNode:
         if print_output: pprint(batch_value)
         return (list(x_norm),list(map(int,x_norm)),num_values)
     
-    @classmethod
-    def IS_CHANGED(cls, *args, **kwargs):
-        return get_hash(*args, *kwargs.items())
-    
 class ImageRepeatInterleavedNode:
     @classmethod
     def INPUT_TYPES(s):
@@ -266,9 +272,10 @@ class LatentRepeatInterleavedNode:
                 "fps": ("INT", {"default": 1, "min": 1})
             }
         }
-    RETURN_TYPES = ("LATENT",)
+    RETURN_NAMES = ("latents","num_latents")
+    RETURN_TYPES = ("LATENT","INT")
     INPUT_IS_LIST = True
-    OUTPUT_IS_LIST = (True, )
+    OUTPUT_IS_LIST = (True, False)
 
     FUNCTION = "merge"
 
@@ -287,17 +294,19 @@ class LatentRepeatInterleavedNode:
     @staticmethod
     def rebatch(samples, repeats):
         offset = 0
+        num_latents = 0
         for i in range(len(samples)):
 
             samples[i]["batch_index"] = [i+offset for i in range(repeats[i])]
             offset += repeats[i]
             
             samples[i]["samples"] = LatentRepeatInterleavedNode.repeat(samples[i]["samples"],repeats[i])
+            num_latents+=len(samples[i]["samples"])
 
             if "noise_mask" in samples[i]:
                 samples[i]["noise_mask"] = LatentRepeatInterleavedNode.repeat(samples[i]["noise_mask"],repeats[i])
 
-        return samples
+        return samples,num_latents
 
     def merge(self, latents, repeats, fps=1):
         repeats = np.array(repeats).flatten()*fps
@@ -323,10 +332,11 @@ class LatentRepeatInterleavedNode:
             pad_width = len(new_latents) - len(repeats)
             repeats = np.pad(repeats, (0, pad_width), mode='constant', constant_values=1)
 
-        new_latents = self.rebatch(new_latents,repeats.astype(int))
+        new_latents,num_latents = self.rebatch(new_latents,repeats.astype(int))
         gc_collect()
+        print(f"{num_latents=}")
 
-        return (new_latents,)
+        return (new_latents,num_latents)
     
 class MergeAudioNode:
    
@@ -379,6 +389,41 @@ class MergeAudioNode:
         audio_name = os.path.basename(audio_path)
         return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda: audio_to_bytes(*merged_audio),)}
 
+    
+
+class SimpleMathNode:
+    def __init__(self):
+        pass
+
     @classmethod
-    def IS_CHANGED(cls, *args, **kwargs):
-        return get_hash(*args, *kwargs.items())
+    def INPUT_TYPES(s):
+        return {
+            "optional": {
+                "n1": ("INT,FLOAT", { "default": 0.0, "step": 0.1 }),
+                "n2": ("INT,FLOAT", { "default": 0.0, "step": 0.1 }),
+                "round_up": ("BOOLEAN", {"default": False})
+            },
+            "required": {
+                "operation": (["","ADD","SUBTRACT","MULTIPLY","DIVIDE","MODULUS"], { "multiline": False, "default": "" }),
+            },
+        }
+
+    INPUT_IS_LIST = True
+    RETURN_TYPES = ("INT", "FLOAT", )
+    FUNCTION = "do_math"
+    CATEGORY = CATEGORY
+
+    def do_math(self, operation, n1 = 0.0, n2 = 0.0, round_up=False):
+        a, b = np.array(n1).flatten(), np.array(n2).flatten()
+        if operation=="ADD": number=a+b
+        elif operation=="SUBTRACT": number=a-b
+        elif operation=="MULTIPLY": number=a*b
+        elif operation=="DIVIDE":
+            assert not any(b==0), f"cannot divide by 0 ({b=})!"
+            number=a/b
+        elif operation=="MODULUS": number=a-b
+        else: number=np.array(n1 or n2).flatten()
+        num_to_int = math.ceil if round_up else math.floor
+        if len(number)>1: # handles list inputs
+            return (list(map(num_to_int,number)), list(map(float,number)),)
+        else: return (num_to_int(number[0]), float(number[0]), )
