@@ -112,7 +112,6 @@ class MergeImageBatches:
             
             return (images,)
         
-        
 class MergeLatentBatches:
     @classmethod
     def INPUT_TYPES(s):
@@ -142,6 +141,7 @@ class MergeLatentBatches:
         gc_collect()
         merged_latent["samples"] = self.merge_tensor([latent["samples"] for latent in latents])
         merged_latent["noise_mask"] = self.merge_tensor([latent["noise_mask"] for latent in latents if "noise_mask" in latent])
+        # if len(merged_latent["noise_mask"])>0: merged_latent["noise_mask"] = torch.mean(merged_latent["noise_mask"],dim=0)
         # merged_latent["batch_index"] = self.merge_tensor([latent["batch_index"] for latent in latents if "batch_index" in latent])
         merged_latent["batch_index"] = range(len(merged_latent["samples"]))
         
@@ -195,7 +195,6 @@ class AudioBatchValueNode:
         audio_zscore = (audio_rms-audio_rms.mean())/audio_rms.std()
         output_range = output_max-output_min
 
-        print(f"{audio_rms.min()=} {audio_rms.max()=} {audio_rms.mean()=}")
         if norm=="tanh":
             x_norm = np.tanh(audio_zscore) #tanh=-1 to 1
             if inverse: x_norm*=-1
@@ -209,10 +208,11 @@ class AudioBatchValueNode:
             x_norm = (audio_zscore - x_min) / (audio_zscore.max() - x_min) #scale=0 to 1
             if inverse: x_norm=1-x_norm
             x_norm = x_norm * output_range + output_min 
-        print(f"{x_norm.min()=} {x_norm.max()=} {x_norm.mean()=}")
 
-        batch_value = ",\n".join([f'{n}:({v})' for n,v in enumerate(x_norm)])
-        if print_output: pprint(batch_value)
+        # batch_value = ",\n".join([f'{n}:({v})' for n,v in enumerate(x_norm)])
+        if print_output:
+            print(f"{audio_rms.min()=} {audio_rms.max()=} {audio_rms.mean()=} {len(audio_rms)=}")
+            print(f"{x_norm.min()=} {x_norm.max()=} {x_norm.mean()=} {len(x_norm)=}")
         return (list(x_norm),list(map(int,x_norm)),num_values)
     
 class ImageRepeatInterleavedNode:
@@ -236,24 +236,25 @@ class ImageRepeatInterleavedNode:
     CATEGORY = CATEGORY
 
     def rebatch(self, images, repeats, fps=1):
-        repeats = np.array(repeats).flatten()*fps
-        print(f"{repeats=}")
+        repeats = np.array(repeats).flatten()
+        fps = np.array(fps)[0]
+        print(f"{repeats=} {fps=}")
         all_images = []
         for img in images:
             for i in range(img.shape[0]):
                 all_images.append(img[i:i+1])
 
-        # expand repeat
         if len(repeats)==1:
-            repeats = repeats.repeat(len(all_images),axis=0)
-        elif len(repeats)<len(all_images):
+            all_images*=repeats[0]
+            repeats = np.ones(len(all_images))
+        elif len(repeats)<len(all_images): # expand repeat
             pad_width = len(all_images) - len(repeats)
             repeats = np.pad(repeats, (0, pad_width), mode='constant', constant_values=1)
 
         for i,img in enumerate(all_images):
-            if repeats[i]>1: all_images[i] = img.expand(repeats[i], *img.shape).flatten(0,1)
+            repeat = int(repeats[i])*fps
+            if repeat>1: all_images[i] = img.expand(repeat, *img.shape).flatten(0,1)
             else: all_images[i] = img
-            print(f"{img.shape=} {all_images[i].shape=}")
 
         print(f"{len(images)=} {len(all_images)=}")
         gc_collect()
@@ -296,21 +297,22 @@ class LatentRepeatInterleavedNode:
         offset = 0
         num_latents = 0
         for i in range(len(samples)):
-
-            samples[i]["batch_index"] = [i+offset for i in range(repeats[i])]
+            repeat = int(repeats[i])
+            samples[i]["batch_index"] = [i+offset for i in range(repeat)]
             offset += repeats[i]
             
-            samples[i]["samples"] = LatentRepeatInterleavedNode.repeat(samples[i]["samples"],repeats[i])
+            samples[i]["samples"] = LatentRepeatInterleavedNode.repeat(samples[i]["samples"],repeat)
             num_latents+=len(samples[i]["samples"])
 
             if "noise_mask" in samples[i]:
-                samples[i]["noise_mask"] = LatentRepeatInterleavedNode.repeat(samples[i]["noise_mask"],repeats[i])
+                samples[i]["noise_mask"] = LatentRepeatInterleavedNode.repeat(samples[i]["noise_mask"],repeat)
 
         return samples,num_latents
 
     def merge(self, latents, repeats, fps=1):
-        repeats = np.array(repeats).flatten()*fps
-        print(f"{repeats=}")
+        repeats = np.array(repeats).flatten()
+        fps = np.array(fps)[0]
+        print(f"{repeats=} {fps=}")
 
         # combine all latents
         new_latents = []
@@ -322,19 +324,21 @@ class LatentRepeatInterleavedNode:
                     new_latent = {
                         "samples": latent["samples"][i],
                     }
-                    if "noise_mask" in latent: new_latent["noise_mask"] = latent["noise_mask"][i]
+                    if "noise_mask" in latent:
+                        print(f"{latent['noise_mask'].shape=}")
+                        new_latent["noise_mask"] = latent["noise_mask"]
                     new_latents.append(new_latent)
 
-        # expand repeat
         if len(repeats)==1:
-            repeats = repeats.repeat(len(new_latents),axis=0)
-        elif len(repeats)<len(new_latents):
+            new_latents *= repeats[0]
+            repeats = np.ones(len(new_latents))
+        elif len(repeats)<len(new_latents): # expand repeat
             pad_width = len(new_latents) - len(repeats)
             repeats = np.pad(repeats, (0, pad_width), mode='constant', constant_values=1)
 
-        new_latents,num_latents = self.rebatch(new_latents,repeats.astype(int))
+        new_latents,num_latents = self.rebatch(new_latents,repeats.astype(np.int16)*fps)
         gc_collect()
-        print(f"{num_latents=}")
+        print(f"{len(latents)=} {num_latents=}")
 
         return (new_latents,num_latents)
     
@@ -404,11 +408,10 @@ class SimpleMathNode:
                 "round_up": ("BOOLEAN", {"default": False})
             },
             "required": {
-                "operation": (["","ADD","SUBTRACT","MULTIPLY","DIVIDE","MODULUS"], { "multiline": False, "default": "" }),
+                "operation": (["CONVERT","ADD","SUBTRACT","MULTIPLY","DIVIDE","MODULUS","MIN","MAX"], { "default": "CONVERT" }),
             },
         }
 
-    INPUT_IS_LIST = True
     RETURN_TYPES = ("INT", "FLOAT", )
     FUNCTION = "do_math"
     CATEGORY = CATEGORY
@@ -421,8 +424,13 @@ class SimpleMathNode:
         elif operation=="DIVIDE":
             assert not any(b==0), f"cannot divide by 0 ({b=})!"
             number=a/b
-        elif operation=="MODULUS": number=a-b
+        elif operation=="MODULUS": number=a%b
+        elif operation=="MIN": number=np.array(list(map(min,zip(a,b))))
+        elif operation=="MAX": number=np.array(list(map(max,zip(a,b))))
         else: number=np.array(n1 or n2).flatten()
+
+        print(f"{a=} \n{operation=} \n{b=} \n{number=}")
+
         num_to_int = math.ceil if round_up else math.floor
         if len(number)>1: # handles list inputs
             return (list(map(num_to_int,number)), list(map(float,number)),)

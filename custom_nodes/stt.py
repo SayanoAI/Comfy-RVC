@@ -136,12 +136,6 @@ class AudioTranscriptionNode:
             print(f"{audio_frames=}s")
 
         return (transcription, audio_frames)
-    
-    @classmethod
-    def IS_CHANGED(cls, *args, **kwargs):
-        print(f"{args=} {kwargs=}")
-        return get_hash(*args, *kwargs.items())
-    
 
 class BatchedTranscriptionEncoderNode:
     def __init__(self):
@@ -189,7 +183,7 @@ class BatchedTranscriptionEncoderNode:
         tokens = clip.tokenize(text)
         cond, pooled = clip.encode_from_tokens(tokens, return_pooled=True)
         
-        return text, duration, cond, pooled
+        return f'"{i*frame_interpolation}": "{text}"', duration, cond, pooled
     
     @staticmethod
     def get_spacy_model(language="en"):
@@ -260,12 +254,12 @@ class BatchedTranscriptionEncoderNode:
                                                    max_words=max_words)
             batch_prompt_text.append(t)
             batch_values_int.append(d)
-            cond.append(c)
-            pooled.append(pc)
+            cond.append(c.squeeze())
+            pooled.append(pc.squeeze())
         
         num_chunks = len(total_chunks)
-        final_pooled_output = torch.cat(pooled, dim=0)
-        final_conditioning = torch.cat(cond, dim=0)
+        final_pooled_output = torch.nested.to_padded_tensor(torch.nested.nested_tensor(pooled, dtype=torch.float32),0)
+        final_conditioning = torch.nested.to_padded_tensor(torch.nested.nested_tensor(cond, dtype=torch.float32),0)
         conditioning = [[final_conditioning,{"pooled_output": final_pooled_output}]]
         del pooled, cond
 
@@ -275,8 +269,3 @@ class BatchedTranscriptionEncoderNode:
             print(f"{num_chunks=}, {max_chunks=}, {num_frames=}")
 
         return (conditioning, batch_prompt_text, batch_values_int, num_chunks, num_frames)
-    
-    @classmethod
-    def IS_CHANGED(cls, *args, **kwargs):
-        print(f"{args=} {kwargs=}")
-        return get_hash(*args, *kwargs.items())
