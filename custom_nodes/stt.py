@@ -156,7 +156,7 @@ class BatchedTranscriptionEncoderNode:
                 'language': (SUPPORTED_LANGUAGES,{"default": "en"}),
                 "max_chunks": ('INT', {"min": 2, "default": None}),
                 "max_words": ('INT', {'default': 16, "min": 0, "max": 32, "display": "slider"}),
-                "frame_interpolation": ("INT", {"default": 0, "min": 0, "max": 120}),
+                "frame_interpolation": ("INT", {"default": 0, "min": 0, "max": 120, "hidden": True}), # needs more testing
                 "prefix": ("STRING", {"default": "masterpiece, best quality", "multiline": True, "forceInput": True}),
                 "suffix": ("STRING", {"default": "", "multiline": True, "forceInput": True}),
                 "print_output": ('BOOLEAN', {'default': True}),
@@ -165,7 +165,7 @@ class BatchedTranscriptionEncoderNode:
 
     OUTPUT_NODE = True
     RETURN_TYPES = ("CONDITIONING", "STRING", "INT", "INT", "INT")
-    RETURN_NAMES = ("conditioning", "batch_prompt_text", "batch_duration_int", "num_chunks", "num_frames")
+    RETURN_NAMES = ("conditioning", "batch_prompt_text", "duration_list", "num_chunks", "num_frames")
 
     FUNCTION = "get_prompt"
 
@@ -175,6 +175,7 @@ class BatchedTranscriptionEncoderNode:
     def process_text_chunks(ichunk,frame_interpolation,clip,*,use_tags,**kwargs):
         i,chunk=ichunk
         frame_interpolation=int(frame_interpolation)
+        index = i*frame_interpolation if frame_interpolation!=0 else i
         text_processor = extract_keywords if use_tags else limit_sentence
         text = text_processor(chunk["text"],**kwargs)
         timestamp = np.nan_to_num(np.array(chunk["timestamp"],dtype=float),nan=i)
@@ -183,7 +184,7 @@ class BatchedTranscriptionEncoderNode:
         tokens = clip.tokenize(text)
         cond, pooled = clip.encode_from_tokens(tokens, return_pooled=True)
         
-        return f'"{i*frame_interpolation}": "{text}"', duration, cond, pooled
+        return f'"{index}": "{text}"', duration, cond, pooled
     
     @staticmethod
     def get_spacy_model(language="en"):
@@ -227,11 +228,15 @@ class BatchedTranscriptionEncoderNode:
 
             if last_chunk is not None:
                 timestamp = last_chunk["timestamp"]
-                start_time = timestamp[-1]
-                duration = max(abs(num_frames - start_time),1)
+                if len(timestamp)==1:
+                    start_time = timestamp[0]
+                    end_time = start_time + abs(num_frames - start_time)+1
+                else:
+                    start_time = timestamp[-1]
+                    end_time = start_time+1
                 total_chunks.append({
                     "text": total_chunks[0]["text"],
-                    "timestamp": (start_time,start_time+duration)
+                    "timestamp": (start_time,end_time)
                 })
         else: # adds 1s frame to prevent audio from stopping early
             num_frames+=1
@@ -241,7 +246,7 @@ class BatchedTranscriptionEncoderNode:
         # split transcript into prompt based on timestamp
         # find length of each frame using timestamp
         batch_prompt_text = []
-        batch_values_int = []
+        duration_list = []
         cond = []
         pooled = []
         for ichunk in enumerate(total_chunks):
@@ -253,19 +258,21 @@ class BatchedTranscriptionEncoderNode:
                                                    spacy_model=spacy_model,
                                                    max_words=max_words)
             batch_prompt_text.append(t)
-            batch_values_int.append(d)
+            duration_list.append(d)
             cond.append(c.squeeze())
             pooled.append(pc.squeeze())
         
         num_chunks = len(total_chunks)
         final_pooled_output = torch.nested.to_padded_tensor(torch.nested.nested_tensor(pooled, dtype=torch.float32),0)
         final_conditioning = torch.nested.to_padded_tensor(torch.nested.nested_tensor(cond, dtype=torch.float32),0)
+        print(f"{final_conditioning.shape=} {final_pooled_output.shape=}")
         conditioning = [[final_conditioning,{"pooled_output": final_pooled_output}]]
+        batch_prompt_text = ",\n".join(batch_prompt_text)
         del pooled, cond
 
         if print_output:
-            print(batch_prompt_text)
-            print(batch_values_int)
+            print(f"{batch_prompt_text=}")
+            print(f"{duration_list=}")
             print(f"{num_chunks=}, {max_chunks=}, {num_frames=}")
 
-        return (conditioning, batch_prompt_text, batch_values_int, num_chunks, num_frames)
+        return (conditioning, batch_prompt_text, duration_list, num_chunks, num_frames)
