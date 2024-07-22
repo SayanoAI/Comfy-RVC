@@ -104,7 +104,7 @@ class AudioTranscriptionNode:
     @staticmethod
     def load_cache(*args,save_filename=""):
         results = None
-        if save_filename: save_filename=get_hash(*args)
+        if not save_filename: save_filename=get_hash(*args)
         cache_name = os.path.join(BASE_CACHE_DIR,"stt",f"{save_filename}.json")
         
         if os.path.isfile(cache_name):
