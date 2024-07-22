@@ -1,0 +1,15 @@
+[project]
+name = "comfy-rvc"
+description = ""
+version = "1.0.0"
+license = {file = "LICENSE"}
+dependencies = ["librosa~=0.10.2", "numpy", "fairseq==0.12.2", "faiss-cpu", "ffmpeg-python", "tqdm", "audioread", "audio-separator[gpu]", "onnxruntime-gpu", "ffmpy", "samplerate", "pyaudio", "spacy", "monotonic_align", "textacy", "pytube", "spacytextblob"]
+
+[project.urls]
+Repository = "https://github.com/SayanoAI/Comfy-RVC"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = "sayanoai"
+DisplayName = "Comfy-RVC"
+Icon = "🌺"
