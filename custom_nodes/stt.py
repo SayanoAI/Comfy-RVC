@@ -160,6 +160,7 @@ class BatchedTranscriptionEncoderNode:
                 "prefix": ("STRING", {"default": "masterpiece, best quality", "multiline": True, "forceInput": True}),
                 "suffix": ("STRING", {"default": "", "multiline": True, "forceInput": True}),
                 "print_output": ('BOOLEAN', {'default': True}),
+                "weights": ("FLOAT",{"default": 1.})
             }
         }
 
@@ -172,12 +173,13 @@ class BatchedTranscriptionEncoderNode:
     CATEGORY = CATEGORY
 
     @staticmethod
-    def process_text_chunks(ichunk,frame_interpolation,clip,*,use_tags,**kwargs):
+    def process_text_chunks(ichunk,frame_interpolation,clip,*,use_tags,weights,**kwargs):
         i,chunk=ichunk
         frame_interpolation=int(frame_interpolation)
         index = i*frame_interpolation if frame_interpolation!=0 else i
         text_processor = extract_keywords if use_tags else limit_sentence
-        text = text_processor(chunk["text"],**kwargs)
+        text = chunk["text"] if weights==1 else f"({chunk['text']}:{weights})"
+        text = text_processor(text,**kwargs)
         timestamp = np.nan_to_num(np.array(chunk["timestamp"],dtype=float),nan=i)
         duration = max(abs(int(np.round(timestamp[1]-timestamp[0]))),1) # at least 1 sec duration
         if frame_interpolation>1: duration*=frame_interpolation
@@ -210,36 +212,40 @@ class BatchedTranscriptionEncoderNode:
 
     def get_prompt(
         self, transcription, clip, language="en", loop=False, use_tags=False, use_sentiment=False,
-        max_words=16,max_chunks=None, frame_interpolation=0, print_output=True, prefix="", suffix=""
+        max_words=16,max_chunks=None, frame_interpolation=0, print_output=True, prefix="", suffix="", weights=1.
     ):
 
         if not max_chunks: max_chunks = len(transcription['chunks'])
         total_chunks = transcription['chunks'][:max_chunks]
-        num_frames = max(max_chunks, *filter(None,np.array([chunk["timestamp"] for chunk in transcription['chunks']]).flatten()))
+        max_frames = max(max_chunks, *filter(None,np.array([chunk["timestamp"] for chunk in transcription['chunks']]).flatten()))
 
-        if loop: # append first frame to chunk stack
-            last_chunk = None
-            for i in range(len(total_chunks)):
-                last_chunk = total_chunks[-1-i]
+        
+        last_chunk = None
+        for i in range(len(total_chunks)):
+            last_chunk = total_chunks[-1-i]
 
-                if "timestamp" in last_chunk and len(last_chunk["timestamp"])>=1:
-                    last_chunk["timestamp"] = np.nan_to_num(np.array(last_chunk["timestamp"],dtype=float),nan=num_frames)
-                    break
+            if "timestamp" in last_chunk and len(last_chunk["timestamp"])>=1:
+                last_chunk["timestamp"] = np.nan_to_num(np.array(last_chunk["timestamp"],dtype=float),nan=max_frames)
+                break
 
-            if last_chunk is not None:
-                timestamp = last_chunk["timestamp"]
-                if len(timestamp)==1:
-                    start_time = timestamp[0]
-                    end_time = start_time + abs(num_frames - start_time)+1
-                else:
-                    start_time = timestamp[-1]
-                    end_time = start_time+1
+        if last_chunk is not None:
+            timestamp = last_chunk["timestamp"]
+            if len(timestamp)==1:
+                start_time = timestamp[0]
+            else:
+                start_time = timestamp[-1 if loop else 0]
+            end_time = start_time + max(max_frames - start_time,0)+1
+            timestamp = (start_time,end_time)
+            if loop: # append first frame to chunk stack
                 total_chunks.append({
                     "text": total_chunks[0]["text"],
-                    "timestamp": (start_time,end_time)
+                    "timestamp": timestamp
                 })
-        else: # adds 1s frame to prevent audio from stopping early
-            num_frames+=1
+            else: # replace final frame
+                total_chunks[-1] = {
+                    "text": total_chunks[-1]["text"],
+                    "timestamp": timestamp
+                }
 
         spacy_model = self.get_spacy_model(language)
 
@@ -252,6 +258,7 @@ class BatchedTranscriptionEncoderNode:
         for ichunk in enumerate(total_chunks):
             t, d, c, pc = self.process_text_chunks(ichunk,frame_interpolation,clip,
                                                    use_tags=use_tags,
+                                                   weights=weights,
                                                    use_sentiment=use_sentiment,
                                                    prefix=prefix,
                                                    suffix=suffix,
@@ -263,6 +270,7 @@ class BatchedTranscriptionEncoderNode:
             pooled.append(pc.squeeze())
         
         num_chunks = len(total_chunks)
+        num_frames = int(np.sum(duration_list))
         final_pooled_output = torch.nested.to_padded_tensor(torch.nested.nested_tensor(pooled, dtype=torch.float32),0)
         final_conditioning = torch.nested.to_padded_tensor(torch.nested.nested_tensor(cond, dtype=torch.float32),0)
         print(f"{final_conditioning.shape=} {final_pooled_output.shape=}")
