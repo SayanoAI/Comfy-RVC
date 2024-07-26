@@ -20,7 +20,7 @@ from textacy.extract import keyterms as kt
 temp_path = folder_paths.get_temp_directory()
 CATEGORY = "🌺RVC-Studio/stt"
 
-def extract_keywords(text: str, max_words: int, spacy_model, use_sentiment=False, prefix="", suffix="", **kwargs):
+def extract_keywords(text: str, max_words: int, spacy_model, use_sentiment=False, prefix="", suffix="", weights=1., **kwargs):
     text = text.strip()
     sentiment = ""
     if use_sentiment:
@@ -42,9 +42,11 @@ def extract_keywords(text: str, max_words: int, spacy_model, use_sentiment=False
     except Exception as error:
         print(f"{text=} {error=}")
 
-    return ", ".join(filter(None,[prefix,*tags,sentiment,suffix])).strip()
+    tags = ", ".join(tags)
+    if len(tags) and weights!=1.: tags = f"({tags}:{weights:.3f})"
+    return ", ".join(filter(None,[prefix,tags,sentiment,suffix])).strip()
 
-def limit_sentence(text: str, max_words: int, spacy_model, use_sentiment=False, prefix="", suffix="", **kwargs):
+def limit_sentence(text: str, max_words: int, spacy_model, use_sentiment=False, prefix="", suffix="", weights=1., **kwargs):
     text = text.strip()
     sentiment = ""
     if use_sentiment:
@@ -57,6 +59,7 @@ def limit_sentence(text: str, max_words: int, spacy_model, use_sentiment=False, 
         elif polarity>.2: sentiment="slight smile"
     topn = int(max_words) if max_words>0 else len(text)
     if topn>0: text = " ".join(text.split()[:topn])
+    if len(text) and weights!=1.: text = f"({text}:{weights:.3f})"
         
     return ", ".join(filter(None,[prefix,text,sentiment,suffix])).strip()
 
@@ -160,7 +163,7 @@ class BatchedTranscriptionEncoderNode:
                 "prefix": ("STRING", {"default": "masterpiece, best quality", "multiline": True, "forceInput": True}),
                 "suffix": ("STRING", {"default": "", "multiline": True, "forceInput": True}),
                 "print_output": ('BOOLEAN', {'default': True}),
-                "weights": ("FLOAT",{"default": 1.})
+                "weights": ("FLOAT",{"default": 1., "step": .01})
             }
         }
 
@@ -173,13 +176,12 @@ class BatchedTranscriptionEncoderNode:
     CATEGORY = CATEGORY
 
     @staticmethod
-    def process_text_chunks(ichunk,frame_interpolation,clip,*,use_tags,weights,**kwargs):
+    def process_text_chunks(ichunk,frame_interpolation,clip,*,use_tags,**kwargs):
         i,chunk=ichunk
         frame_interpolation=int(frame_interpolation)
         index = i*frame_interpolation if frame_interpolation!=0 else i
-        text_processor = extract_keywords if use_tags else limit_sentence
-        text = chunk["text"] if weights==1 else f"({chunk['text']}:{weights})"
-        text = text_processor(text,**kwargs)
+        textProcessor = extract_keywords if use_tags else limit_sentence
+        text = textProcessor(chunk["text"],**kwargs)
         timestamp = np.nan_to_num(np.array(chunk["timestamp"],dtype=float),nan=i)
         duration = max(abs(int(np.round(timestamp[1]-timestamp[0]))),1) # at least 1 sec duration
         if frame_interpolation>1: duration*=frame_interpolation
@@ -217,7 +219,7 @@ class BatchedTranscriptionEncoderNode:
 
         if not max_chunks: max_chunks = len(transcription['chunks'])
         total_chunks = transcription['chunks'][:max_chunks]
-        max_frames = max(max_chunks, *filter(None,np.array([chunk["timestamp"] for chunk in transcription['chunks']]).flatten()))
+        max_frames = max(max_chunks, *filter(None,np.array([chunk["timestamp"] for chunk in total_chunks]).flatten()))
 
         
         last_chunk = None
