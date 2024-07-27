@@ -111,6 +111,6 @@ class UVR5Node:
         
         return (lambda:audio_to_bytes(*primary), lambda:audio_to_bytes(*secondary))
 
-    @classmethod
-    def IS_CHANGED(cls, *args, **kwargs):
-        return get_hash(*args,*kwargs.items())
+    # @classmethod
+    # def IS_CHANGED(cls, *args, **kwargs):
+    #     return get_hash(*args,*kwargs.items())

@@ -61,6 +61,3 @@ class PreviewAudio:
             "filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId, "autoplay": autoplay
             }]}, "result": (output_path, lambda:audio_to_bytes(*input_audio))}
     
-    @classmethod
-    def IS_CHANGED(cls, audio):
-        return get_hash(audio())

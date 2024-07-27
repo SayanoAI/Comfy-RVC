@@ -76,9 +76,5 @@ class RVCNode:
         if not os.path.isfile(preview_file): shutil.copyfile(cache_name,preview_file)
         return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda:audio_to_bytes(*output_audio),)}
 
-
-    @classmethod
-    def IS_CHANGED(cls, *args, **kwargs):
-        return get_hash(*args, *kwargs.items())
     
 

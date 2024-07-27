@@ -76,6 +76,10 @@ class LoadPitchExtractionParams:
     def load_params(self, **params):
         if "rmvpe" in params.get("f0_method",""): model_downloader("rmvpe.pt")
         return (params,)
+    
+    @classmethod
+    def IS_CHANGED(cls, **params):
+        return get_hash(**params)
 
 class LoadHubertModel:
     @classmethod
@@ -104,7 +108,7 @@ class LoadHubertModel:
     @classmethod
     def IS_CHANGED(cls, model):
         return get_hash(model)
-
+    
 class LoadRVCModelNode:
 
     @classmethod
@@ -130,9 +134,6 @@ class LoadRVCModelNode:
 
     FUNCTION = 'load_model'
 
-    @classmethod
-    def IS_CHANGED(cls, model):
-        return get_hash(model)
 
     def load_model(self, model, index="None"):
         model_path = file_index = None
@@ -154,6 +155,10 @@ class LoadRVCModelNode:
             print(f"Error in {self.__class__.__name__}: {e}")
             raise e
         finally: return (lambda:get_vc(model_path, file_index),filename.split(".")[0])
+
+    @classmethod
+    def IS_CHANGED(cls, model, index):
+        return get_hash(model, index)
     
 class LoadWhisperModelNode:
 
@@ -177,9 +182,6 @@ class LoadWhisperModelNode:
 
     FUNCTION = 'load_model'
 
-    @classmethod
-    def IS_CHANGED(cls, model):
-        return get_hash(model)
 
     def load_model(self, model_id, max_new_tokens=128, chunk_length_s=12, batch_size=16):
         device = get_optimal_torch_device()
@@ -204,9 +206,12 @@ class LoadWhisperModelNode:
                 return_timestamps=True,
                 torch_dtype=torch_dtype,
                 device=device,
-                # generate_kwargs=generate_kwargs,
             )
         return ([pipe,model_id], )
+    
+    @classmethod
+    def IS_CHANGED(cls, model_id, max_new_tokens, chunk_length_s, batch_size):
+        return get_hash(model_id, max_new_tokens, chunk_length_s, batch_size)
 
 class LoadAudio:
     @classmethod
@@ -233,12 +238,11 @@ class LoadAudio:
         sr = None if sr=="None" else int(sr)
         audio = load_input_audio(audio_path,sr=sr)
         return {"ui": {"preview": [{"filename": audio_name, "type": "input", "widgetId": widgetId}]}, "result": (audio_name, lambda:audio_to_bytes(*audio))}
-
+    
     @classmethod
-    def IS_CHANGED(cls, audio):
-        audio_path = os.path.join(input_path,audio)
-        print(f"{audio_path=}")
-        return get_file_hash(audio_path)
+    def IS_CHANGED(cls, audio, sr):
+        return get_hash(audio,sr)
+
     
 class DownloadAudio:
     @classmethod
@@ -284,5 +288,5 @@ class DownloadAudio:
         return {"ui": {"preview": [{"filename": os.path.basename(audio_path), "type": "input", "widgetId": widgetId}]}, "result": (audio_name, lambda:audio_to_bytes(*input_audio))}
 
     @classmethod
-    def IS_CHANGED(cls, url):
-        return get_hash(url)
+    def IS_CHANGED(cls, url, sr, song_name):
+        return get_hash(url,sr,song_name)

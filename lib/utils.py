@@ -16,8 +16,8 @@ from . import ObjectNamespace, get_cwd
 torch.manual_seed(1337)
 CWD = get_cwd()
 
-def get_hash(*args):
-    return hashlib.md5("".join(str(data) for data in args).encode()).hexdigest()
+def get_hash(*args,**kwargs):
+    return hashlib.md5("".join([str(data) for data in args]+list(kwargs.values())).encode()).hexdigest()
 
 def get_file_hash(fname: str, size=10*1024**2):
     with open(fname,"rb") as f:
