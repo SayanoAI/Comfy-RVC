@@ -3,7 +3,7 @@ from .custom_nodes.uvr import UVR5Node
 from .custom_nodes.rvc import RVCNode
 from .custom_nodes.loaders import DownloadAudio, LoadAudio, LoadWhisperModelNode, LoadRVCModelNode, LoadHubertModel, LoadPitchExtractionParams
 from .custom_nodes.output import PreviewAudio
-from .custom_nodes.utils import AudioBatchValueNode, MergeImageBatches, MergeLatentBatches, ImageRepeatInterleavedNode, LatentRepeatInterleavedNode, MergeAudioNode, SimpleMathNode
+from .custom_nodes.utils import AudioBatchValueNode, MergeImageBatches, MergeLatentBatches, ImageRepeatInterleavedNode, LatentRepeatInterleavedNode, MergeAudioNode, SimpleMathNode, SliceNode
 
 # Set the web directory, any .js file in that directory will be loaded by the frontend as a frontend extension
 WEB_DIRECTORY = "./web"
@@ -28,7 +28,8 @@ NODE_CLASS_MAPPINGS = {
     "LatentRepeatInterleavedNode": LatentRepeatInterleavedNode,
     "DownloadAudio": DownloadAudio,
     "BatchedTranscriptionEncoderNode": BatchedTranscriptionEncoderNode,
-    "SimpleMathNode": SimpleMathNode
+    "SimpleMathNode": SimpleMathNode,
+    "SliceNode": SliceNode
 }
 
 # A dictionary that contains the friendly/humanly readable titles for the nodes
@@ -50,5 +51,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ImageRepeatInterleavedNode": "🌺Image Repeat Interleaved",
     "LatentRepeatInterleavedNode": "🌺Latent Repeat Interleaved",
     "BatchedTranscriptionEncoderNode": "🌺Batched CLIP Transcription Encode (Prompt)",
-    "SimpleMathNode": "🌺Simple Math Operations"
+    "SimpleMathNode": "🌺Simple Math Operations",
+    "SliceNode": "🌺Slice Array"
 }

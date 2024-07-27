@@ -37,7 +37,7 @@ function addPreviewWidget(nodeType, nodeData, widgetName="audio", when="onNodeCr
             // })
             break;
         case "onExecuted":
-            chainCallback(nodeType.prototype, "onExecuted", function (data) {
+            chainCallback(nodeType.prototype, when, function (data) {
                 const widgetId = `opt_widget-${Math.random()}`
                 nodeData.input.hidden = {
                     ...nodeData.input.hidden,
@@ -129,61 +129,6 @@ function previewAudio(node,options={filename: null, type: "input", widgetName: "
     previewWidget.audioEl.hidden = false;
     previewWidget.parentEl.appendChild(previewWidget.audioEl)
     return previewWidget
-}
-
-function audioPreview(node, inputName, inputData, app) {
-    
-    const options = inputData.pop()
-    const audioWidget = node.widgets.find((w) => w.name === options.widgetName);
-    if (!audioWidget) return null
-    
-    /* 
-    A method that returns the required style for the html 
-    */
-    var default_value = audioWidget.value;
-    Object.defineProperty(audioWidget, "value", {
-        set : function(value) {
-            this._real_value = value;
-        },
-
-        get : function() {
-            let value = "";
-            if (this._real_value) {
-                value = this._real_value;
-            } else {
-                return default_value;
-            }
-
-            if (value.filename) {
-                let real_value = value;
-                value = "";
-                if (real_value.subfolder) {
-                    value = real_value.subfolder + "/";
-                }
-
-                value += real_value.filename;
-
-                if(real_value.type && real_value.type !== "input")
-                    value += ` [${real_value.type}]`;
-            }
-            return value;
-        }
-    });
-
-    let element = previewAudio(node, {filename: audioWidget.value, ...options});
-    const cb = node.callback;
-    audioWidget.callback = function () {
-        element = previewAudio(node, {filename: audioWidget.value, ...options});
-        if (cb) {
-            return cb.apply(this, arguments);
-        }
-    };
-    // document.body.append(element);
-    // console.log({element})
-    // let uploadWidget = this.addWidget(element);
-    // uploadWidget.options.serialize = false;
-
-    return { widget: element };
 }
 
 function chainCallback(object, property, callback) {
@@ -335,8 +280,6 @@ function addUploadWidget(nodeType, nodeData, widgetName, type="video") {
     });
 }
 
-// ComfyWidgets.AUDIOPREVIEW = audioPreview;
-
 app.registerExtension({
 	name: "RVC-Studio.UI",
 	async beforeRegisterNodeDef(nodeType, nodeData, app) {
@@ -357,6 +300,13 @@ app.registerExtension({
                     break;
                 case "RVCNode":
                     addPreviewWidget(nodeType, nodeData, "audio", "onExecuted" )
+                    break;
+
+                case "SliceNode":
+                    chainCallback(nodeType.prototype, "onConnectInput", function (data, inputs) {
+                        nodeType.nodeData.output[0] = inputs[1]
+                        console.log({nodeType, nodeData, data, inputs, node: app})
+                    })
                     break;
 
                 default:

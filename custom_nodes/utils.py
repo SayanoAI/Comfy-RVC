@@ -393,8 +393,6 @@ class MergeAudioNode:
         audio_name = os.path.basename(audio_path)
         return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda: audio_to_bytes(*merged_audio),)}
 
-    
-
 class SimpleMathNode:
     def __init__(self):
         pass
@@ -435,3 +433,36 @@ class SimpleMathNode:
         if len(number)>1: # handles list inputs
             return (list(map(num_to_int,number)), list(map(float,number)),)
         else: return (num_to_int(number[0]), float(number[0]), )
+
+# FROM: https://github.com/theUpsider/ComfyUI-Logic/blob/master/nodes.py#L11
+class AlwaysEqualProxy(str):
+    def __eq__(self, _):
+        return True
+
+    def __ne__(self, _):
+        return False
+    
+class SliceNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "optional": {
+                "start": ("INT", {"default": 0, "min": 0}),
+                "end": ("INT", {"default": -1}),
+            },
+            "required": {
+                "array": (AlwaysEqualProxy("*"),),
+            },
+        }
+
+    RETURN_TYPES = (AlwaysEqualProxy("*"),)
+    RETURN_NAMES = ("array",)
+    FUNCTION = "slice"
+    CATEGORY = CATEGORY
+
+    def slice(self, array, start=0, end=-1):
+        if end==-1: end=len(array)
+        return (array[start:end],)
