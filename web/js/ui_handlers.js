@@ -285,14 +285,14 @@ app.registerExtension({
 	async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.category?.includes("RVC")){
             switch (nodeData?.name){
-                case "LoadAudio": 
+                case "RVC-Studio.LoadAudio": 
                     addUploadWidget(nodeType, nodeData, "audio", "audio")
                     addPreviewWidget(nodeType, nodeData, "audio", "onNodeCreated" )
                     break
                 case "DownloadAudio":
                     addPreviewWidget(nodeType, nodeData, "audio", "onExecuted" )
                     break
-                case "PreviewAudio":
+                case "RVC-Studio.PreviewAudio":
                     addPreviewWidget(nodeType, nodeData, "audio", "onExecuted" )
                     break
                 case "MergeAudioNode":

@@ -12,8 +12,8 @@ WEB_DIRECTORY = "./web"
 # NOTE: names should be globally unique
 NODE_CLASS_MAPPINGS = {
     "UVR5Node": UVR5Node,
-    "LoadAudio": LoadAudio,
-    "PreviewAudio": PreviewAudio,
+    "RVC-Studio.LoadAudio": LoadAudio,
+    "RVC-Studio.PreviewAudio": PreviewAudio,
     "MergeAudioNode": MergeAudioNode,
     "AudioTranscriptionNode": AudioTranscriptionNode,
     "LoadWhisperModelNode": LoadWhisperModelNode,
@@ -35,9 +35,9 @@ NODE_CLASS_MAPPINGS = {
 # A dictionary that contains the friendly/humanly readable titles for the nodes
 NODE_DISPLAY_NAME_MAPPINGS = {
     "UVR5Node": "🌺Vocal Removal",
-    "LoadAudio": "🌺Load Audio",
+    "RVC-Studio.LoadAudio": "🌺Load Audio",
     "DownloadAudio": "🌺Youtube Downloader",
-    "PreviewAudio": "🌺Preview Audio",
+    "RVC-Studio.PreviewAudio": "🌺Preview Audio",
     "AudioTranscriptionNode": "🌺Transcribe Audio",
     "LoadWhisperModelNode": "🌺Load Whisper Model",
     "LoadRVCModelNode": "🌺Load RVC Model",
