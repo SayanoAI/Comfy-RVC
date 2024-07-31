@@ -303,9 +303,9 @@ app.registerExtension({
                     break;
 
                 case "SliceNode":
-                    chainCallback(nodeType.prototype, "onConnectInput", function (data, inputs) {
-                        nodeType.nodeData.output[0] = inputs[1]
-                        console.log({nodeType, nodeData, data, inputs, node: app})
+                    chainCallback(nodeType.prototype, "onConnectInput", function (_, inputs) {
+                        this.outputs[0].name = inputs;
+                        this.outputs[0].type = inputs;
                     })
                     break;
 
