@@ -309,6 +309,13 @@ app.registerExtension({
                     })
                     break;
 
+                case "Any2ListNode":
+                    chainCallback(nodeType.prototype, "onConnectInput", function (_, inputs) {
+                        this.outputs[0].name = inputs;
+                        this.outputs[0].type = inputs;
+                    })
+                    break;
+
                 default:
                     
                     break

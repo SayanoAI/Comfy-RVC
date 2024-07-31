@@ -264,7 +264,7 @@ class BatchedTranscriptionEncoderNode:
             pooled.append(pc.squeeze())
         
         num_chunks = len(total_chunks)
-        duration_list = list(map(np.round,duration_list))
+        duration_list = np.round(duration_list)
         num_frames = int(np.sum(duration_list))+1
         final_pooled_output = torch.nested.to_padded_tensor(torch.nested.nested_tensor(pooled, dtype=torch.float32),0)
         final_conditioning = torch.nested.to_padded_tensor(torch.nested.nested_tensor(cond, dtype=torch.float32),0)
@@ -278,4 +278,4 @@ class BatchedTranscriptionEncoderNode:
             print(f"{duration_list=}")
             print(f"{num_chunks=}, {max_chunks=}, {num_frames=}")
 
-        return (conditioning, batch_prompt_text, duration_list, num_chunks, num_frames)
+        return (conditioning, batch_prompt_text, list(map(int,duration_list)), num_chunks, num_frames)

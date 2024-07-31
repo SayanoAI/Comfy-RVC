@@ -392,6 +392,11 @@ class MergeAudioNode:
         del audios
         audio_name = os.path.basename(audio_path)
         return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda: audio_to_bytes(*merged_audio),)}
+    
+    @classmethod
+    def IS_CHANGED(cls, audio1, audio2, sr="None", merge_type="median", normalize=False, audio3_opt=None, audio4_opt=None):
+        audios = [audio() for audio in [audio1, audio2, audio3_opt, audio4_opt] if audio is not None]
+        return get_hash(sr, merge_type, normalize, *audios)
 
 class SimpleMathNode:
     def __init__(self):
@@ -401,8 +406,8 @@ class SimpleMathNode:
     def INPUT_TYPES(s):
         return {
             "optional": {
-                "n1": ("INT,FLOAT", { "default": 0.0, "step": 0.1 }),
-                "n2": ("INT,FLOAT", { "default": 0.0, "step": 0.1 }),
+                "n1": ("INT,FLOAT", { "default": None, "step": 0.1 }),
+                "n2": ("INT,FLOAT", { "default": None, "step": 0.1 }),
                 "round_up": ("BOOLEAN", {"default": False})
             },
             "required": {
@@ -410,11 +415,11 @@ class SimpleMathNode:
             },
         }
 
-    RETURN_TYPES = ("INT", "FLOAT", )
+    RETURN_TYPES = ("INT", "FLOAT")
     FUNCTION = "do_math"
     CATEGORY = CATEGORY
 
-    def do_math(self, operation, n1 = 0.0, n2 = 0.0, round_up=False):
+    def do_math(self, operation, n1 = None, n2 = None, round_up=False):
         a, b = np.array(n1).flatten(), np.array(n2).flatten()
         if operation=="ADD": number=a+b
         elif operation=="SUBTRACT": number=a-b
@@ -425,7 +430,7 @@ class SimpleMathNode:
         elif operation=="MODULUS": number=a%b
         elif operation=="MIN": number=np.array(list(map(min,zip(a,b))))
         elif operation=="MAX": number=np.array(list(map(max,zip(a,b))))
-        else: number=np.array(n1 or n2).flatten()
+        else: number=a if n1 is not None else b
 
         print(f"{a=} \n{operation=} \n{b=} \n{number=}")
 
@@ -466,3 +471,44 @@ class SliceNode:
     def slice(self, array, start=0, end=-1):
         if end==-1: end=len(array)
         return (array[start:end],)
+
+class ZipImagesNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "images1": ("IMAGE",),
+                "images2": ("IMAGE",),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    OUTPUT_IS_LIST = (True, )
+    FUNCTION = "dozip"
+    CATEGORY = CATEGORY
+
+    def dozip(self, images1, images2):
+        return (list(map(torch.stack,zip(images1,images2))),)
+    
+class Any2ListNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "any": (AlwaysEqualProxy("*"),),
+            },
+        }
+
+    RETURN_TYPES = (AlwaysEqualProxy("*"),)
+    OUTPUT_IS_LIST = (True, )
+    FUNCTION = "to"
+    CATEGORY = CATEGORY
+
+    def to(self, any):
+        return (list(any),)
