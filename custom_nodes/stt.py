@@ -163,7 +163,8 @@ class BatchedTranscriptionEncoderNode:
                 "prefix": ("STRING", {"default": "masterpiece, best quality", "multiline": True, "forceInput": True}),
                 "suffix": ("STRING", {"default": "", "multiline": True, "forceInput": True}),
                 "print_output": ('BOOLEAN', {'default': True}),
-                "weights": ("FLOAT",{"default": 1., "step": .01})
+                "weights": ("FLOAT",{"default": 1., "step": .01}),
+                "pad_frames": ("INT", {"default": 0})
             }
         }
 
@@ -214,12 +215,13 @@ class BatchedTranscriptionEncoderNode:
 
     def get_prompt(
         self, transcription, clip, language="en", loop=False, use_tags=False, use_sentiment=False,
-        max_words=16,max_chunks=None, frame_interpolation=0, print_output=True, prefix="", suffix="", weights=1.
+        max_words=16,max_chunks=None, frame_interpolation=0, print_output=True, prefix="", suffix="",
+        weights=1., pad_frames=0
     ):
 
         if not max_chunks: max_chunks = len(transcription['chunks'])
         total_chunks = transcription['chunks'][:max_chunks]
-        max_frames = max(max_chunks, *filter(None,np.array([chunk["timestamp"] for chunk in total_chunks]).flatten()))
+        max_frames = max(max_chunks, *filter(None,np.array([chunk["timestamp"] for chunk in total_chunks]).flatten())) + pad_frames
 
         last_chunk = None
         for i in range(len(total_chunks)):
@@ -232,7 +234,7 @@ class BatchedTranscriptionEncoderNode:
         if last_chunk is not None:
             timestamp = last_chunk["timestamp"]
             start_time = timestamp[-1 if loop else 0]
-            end_time = start_time + max(max_frames - start_time,0)+1
+            end_time = start_time + max(max_frames - start_time,0)
             timestamp = (start_time,end_time)
             last_chunk = dict(timestamp=timestamp,text=total_chunks[0 if loop else -1]["text"])
 
@@ -265,7 +267,7 @@ class BatchedTranscriptionEncoderNode:
         
         num_chunks = len(total_chunks)
         duration_list = np.round(duration_list)
-        num_frames = int(np.sum(duration_list))+1
+        num_frames = int(np.sum(duration_list))
         final_pooled_output = torch.nested.to_padded_tensor(torch.nested.nested_tensor(pooled, dtype=torch.float32),0)
         final_conditioning = torch.nested.to_padded_tensor(torch.nested.nested_tensor(cond, dtype=torch.float32),0)
         print(f"{final_conditioning.shape=} {final_pooled_output.shape=}")
