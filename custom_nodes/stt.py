@@ -183,7 +183,7 @@ class BatchedTranscriptionEncoderNode:
         textProcessor = extract_keywords if use_tags else limit_sentence
         text = textProcessor(chunk["text"],**kwargs)
         timestamp = np.nan_to_num(np.array(chunk["timestamp"],dtype=float),nan=i)
-        duration = max(abs(int(np.round(timestamp[1]-timestamp[0]))),1) # at least 1 sec duration
+        duration = max(timestamp[1]-timestamp[0],1) # at least 1 sec duration
         if frame_interpolation>1: duration*=frame_interpolation
         tokens = clip.tokenize(text)
         cond, pooled = clip.encode_from_tokens(tokens, return_pooled=True)
@@ -221,7 +221,6 @@ class BatchedTranscriptionEncoderNode:
         total_chunks = transcription['chunks'][:max_chunks]
         max_frames = max(max_chunks, *filter(None,np.array([chunk["timestamp"] for chunk in total_chunks]).flatten()))
 
-        
         last_chunk = None
         for i in range(len(total_chunks)):
             last_chunk = total_chunks[-1-i]
@@ -232,22 +231,15 @@ class BatchedTranscriptionEncoderNode:
 
         if last_chunk is not None:
             timestamp = last_chunk["timestamp"]
-            if len(timestamp)==1:
-                start_time = timestamp[0]
-            else:
-                start_time = timestamp[-1 if loop else 0]
+            start_time = timestamp[-1 if loop else 0]
             end_time = start_time + max(max_frames - start_time,0)+1
             timestamp = (start_time,end_time)
+            last_chunk = dict(timestamp=timestamp,text=total_chunks[0 if loop else -1]["text"])
+
             if loop: # append first frame to chunk stack
-                total_chunks.append({
-                    "text": total_chunks[0]["text"],
-                    "timestamp": timestamp
-                })
+                total_chunks.append(last_chunk)
             else: # replace final frame
-                total_chunks[-1] = {
-                    "text": total_chunks[-1]["text"],
-                    "timestamp": timestamp
-                }
+                total_chunks[-1] = last_chunk
 
         spacy_model = self.get_spacy_model(language)
 
@@ -272,7 +264,8 @@ class BatchedTranscriptionEncoderNode:
             pooled.append(pc.squeeze())
         
         num_chunks = len(total_chunks)
-        num_frames = int(np.sum(duration_list))
+        duration_list = list(map(np.round,duration_list))
+        num_frames = int(np.sum(duration_list))+1
         final_pooled_output = torch.nested.to_padded_tensor(torch.nested.nested_tensor(pooled, dtype=torch.float32),0)
         final_conditioning = torch.nested.to_padded_tensor(torch.nested.nested_tensor(cond, dtype=torch.float32),0)
         print(f"{final_conditioning.shape=} {final_pooled_output.shape=}")

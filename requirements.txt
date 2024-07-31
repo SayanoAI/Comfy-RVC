@@ -5,8 +5,8 @@ faiss-cpu
 ffmpeg-python
 tqdm
 audioread
+onnxruntime
 audio-separator[gpu]
-onnxruntime-gpu
 ffmpy
 samplerate
 pyaudio
@@ -15,3 +15,4 @@ monotonic_align
 textacy
 pytube
 spacytextblob
+accelerate
