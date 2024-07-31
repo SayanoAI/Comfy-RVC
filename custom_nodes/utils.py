@@ -45,7 +45,7 @@ class MergeImageBatches:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "iterate": ("BOOLEAN",{"default": False})
+                "iterate": ("BOOLEAN",{"default": True})
             },
         }
 
@@ -100,10 +100,18 @@ class MergeImageBatches:
             print(f"{iterate=}")
 
             if iterate:
-                if self.__archive__ is None:
-                    with tempfile.NamedTemporaryFile(delete=False) as ntf:
-                        self.__archive__ = ntf.name
-                images = self.iter_images(self.__archive__,images)
+                image = images[0]
+                for new_img in images[1:]:
+                    image = torch.cat([image,new_img])
+                    gc_collect()
+
+                # if self.__archive__ is None:
+                #     with tempfile.NamedTemporaryFile(delete=False) as ntf:
+                #         self.__archive__ = ntf.name
+                # images = self.iter_images(self.__archive__,images)
+                del images
+                images = image
+                gc_collect()
             else:
                 images = torch.cat(images)
             
