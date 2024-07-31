@@ -54,9 +54,7 @@ class VC(FeatureExtractor):
             "output_layer": 9 if version == "v1" else 12,
         }
         feats = model.extract_features(version=version,**inputs)
-        # with torch.no_grad():
-        #     logits = model.extract_features(**inputs)
-        #     feats = model.final_proj(logits[0]) if version == "v1" else logits[0]
+
         if protect < 0.5 and pitch is not None and pitchf is not None:
             feats0 = feats.clone()
         if index is not None and big_npy is not None and index_rate > 0:
@@ -64,10 +62,7 @@ class VC(FeatureExtractor):
             if self.is_half:
                 npy = npy.astype("float32")
 
-            # _, I = index.search(npy, 1)
-            # npy = big_npy[I.squeeze()]
-
-            score, ix = index.search(npy, k=8)
+            score, ix = index.search(npy, k=1)
             weight = np.square(1 / score)
             weight /= weight.sum(axis=1, keepdims=True)
             npy = np.sum(big_npy[ix] * np.expand_dims(weight, axis=2), axis=1)
@@ -169,7 +164,6 @@ class VC(FeatureExtractor):
         t2 = ttime()
         times[1] += t2 - t1
 
-        # with tqdm(total=len(opt_ts), desc="Processing", unit="window") as pbar:
         for i, t in enumerate(opt_ts):
             t = t // self.window * self.window
             start = s
@@ -179,8 +173,6 @@ class VC(FeatureExtractor):
             pitchf_slice = pitchf[:, start // self.window:end // self.window] if if_f0 else None
             audio_opt.append(self.vc(model, net_g, sid, audio_slice, pitch_slice, pitchf_slice, times, index, big_npy, index_rate, version, protect)[self.t_pad_tgt : -self.t_pad_tgt])
             s = t
-                # pbar.update(1)
-                # pbar.refresh()
 
         audio_slice = audio_pad[t:]
         pitch_slice = pitch[:, t // self.window:] if if_f0 and t is not None else pitch
