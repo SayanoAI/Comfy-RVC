@@ -169,8 +169,9 @@ class BatchedTranscriptionEncoderNode:
         }
 
     OUTPUT_NODE = True
-    RETURN_TYPES = ("CONDITIONING", "STRING", "INT", "INT", "INT")
-    RETURN_NAMES = ("conditioning", "batch_prompt_text", "duration_list", "num_chunks", "num_frames")
+    RETURN_TYPES = ("CONDITIONING", "STRING", "INT", "INT", "INT", "STRING")
+    RETURN_NAMES = ("conditioning", "batch_prompt_text", "duration_list", "num_chunks", "num_frames", "prompt_text_list")
+    OUTPUT_IS_LIST = (False, False, False, False, False, True)
 
     FUNCTION = "get_prompt"
 
@@ -180,16 +181,15 @@ class BatchedTranscriptionEncoderNode:
     def process_text_chunks(ichunk,frame_interpolation,clip,*,use_tags,**kwargs):
         i,chunk=ichunk
         frame_interpolation=int(frame_interpolation)
-        index = i*frame_interpolation if frame_interpolation!=0 else i
         textProcessor = extract_keywords if use_tags else limit_sentence
         text = textProcessor(chunk["text"],**kwargs)
-        timestamp = np.nan_to_num(np.array(chunk["timestamp"],dtype=float),nan=i)
+        timestamp = np.nan_to_num(np.array(chunk["timestamp"],dtype=float),nan=i*frame_interpolation)
         duration = max(timestamp[1]-timestamp[0],1) # at least 1 sec duration
         if frame_interpolation>1: duration*=frame_interpolation
         tokens = clip.tokenize(text)
         cond, pooled = clip.encode_from_tokens(tokens, return_pooled=True)
         
-        return f'"{index}": "{text}"', duration, cond, pooled
+        return text, duration, cond, pooled
     
     @staticmethod
     def get_spacy_model(language="en"):
@@ -247,7 +247,7 @@ class BatchedTranscriptionEncoderNode:
 
         # split transcript into prompt based on timestamp
         # find length of each frame using timestamp
-        batch_prompt_text = []
+        text_list = []
         duration_list = []
         cond = []
         pooled = []
@@ -260,7 +260,7 @@ class BatchedTranscriptionEncoderNode:
                                                    suffix=suffix,
                                                    spacy_model=spacy_model,
                                                    max_words=max_words)
-            batch_prompt_text.append(t)
+            text_list.append(t)
             duration_list.append(d)
             cond.append(c.squeeze())
             pooled.append(pc.squeeze())
@@ -272,6 +272,7 @@ class BatchedTranscriptionEncoderNode:
         final_conditioning = torch.nested.to_padded_tensor(torch.nested.nested_tensor(cond, dtype=torch.float32),0)
         print(f"{final_conditioning.shape=} {final_pooled_output.shape=}")
         conditioning = [[final_conditioning,{"pooled_output": final_pooled_output}]]
+        batch_prompt_text = [f'"{i if frame_interpolation==0 else i*frame_interpolation}": "{text}"' for text in text_list]
         batch_prompt_text = ",\n".join(batch_prompt_text)
         del pooled, cond
 
@@ -280,4 +281,4 @@ class BatchedTranscriptionEncoderNode:
             print(f"{duration_list=}")
             print(f"{num_chunks=}, {max_chunks=}, {num_frames=}")
 
-        return (conditioning, batch_prompt_text, list(map(int,duration_list)), num_chunks, num_frames)
+        return (conditioning, batch_prompt_text, list(map(int,duration_list)), num_chunks, num_frames, text_list)
