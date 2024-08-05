@@ -168,14 +168,14 @@ class AudioBatchValueNode:
         return {
             "required": {
                 "audio": ('VHS_AUDIO',),
-                "num_segments": ('INT', {"min": 1, "max": 128, "step": 1, "forceInput": True}),
+                "num_segments": ('INT', {"min": 2, "max": 128, "step": 1, "forceInput": True}),
                 "output_min": ('FLOAT', {'default': 0., "min": -1000., "max": 1000., "step": .01}),
                 "output_max": ('FLOAT', {'default': 1., "min": 0., "max": 1000., "step": .01}),
                 "norm": (["scale","tanh","sigmoid"], {"default": "scale"}),
             },
             "optional": {
                 "silence_threshold": ("INT", {"default": 1000, "min": 1, "max": MAX_INT16, "step": 1, "display": "slider"}),
-                "frame_multiplier": ("INT", {"default": 1, "min": 1, "max": 120, "step": 1}),
+                "duration_list": ("INT", {"default": None, "min": 1, "forceInput": True}),
                 "print_output": ("BOOLEAN", {"default": False}),
                 "inverse": ("BOOLEAN", {"default": False}),
             }
@@ -193,12 +193,12 @@ class AudioBatchValueNode:
         return np.sqrt(np.nanmean(audio**2))
 
     def get_frame_weights(self, audio, num_segments, output_min, output_max, norm,
-                          silence_threshold=1000, frame_multiplier=1, print_output=False, inverse=False):
+                          silence_threshold=1000, duration_list=None, print_output=False, inverse=False):
         assert output_max>=output_min, f"{output_max=} must be greater or equal to {output_min=}!"
 
         audio_data = bytes_to_audio(audio())
         audio,_ = remix_audio(audio_data,norm=True,to_int16=True)
-        num_values = int(num_segments*frame_multiplier)
+        num_values = int(num_segments)
         audio_rms = np.nan_to_num(list(map(self.get_rms,np.array_split(audio.flatten()/silence_threshold, num_values))),nan=0)
         audio_zscore = (audio_rms-audio_rms.mean())/audio_rms.std()
         output_range = output_max-output_min
@@ -221,7 +221,16 @@ class AudioBatchValueNode:
         if print_output:
             print(f"{audio_rms.min()=} {audio_rms.max()=} {audio_rms.mean()=} {len(audio_rms)=}")
             print(f"{x_norm.min()=} {x_norm.max()=} {x_norm.mean()=} {len(x_norm)=}")
-        return (list(x_norm),list(map(int,x_norm)),num_values)
+        
+        if duration_list is not None:
+            segments = np.cumsum(duration_list)
+            x_norm = np.array_split(x_norm,segments)
+            x_norm = map(list,x_norm)
+            x_norm_int = [list(map(int,norms)) for norms in x_norm]
+        else:
+            x_norm_int = map(int,x_norm)
+
+        return (list(x_norm),list(x_norm_int),num_values)
     
 class ImageRepeatInterleavedNode:
     @classmethod
@@ -520,3 +529,23 @@ class Any2ListNode:
 
     def to(self, any):
         return (list(any),)
+    
+class List2AnyNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "any": (AlwaysEqualProxy("*"),),
+            },
+        }
+
+    RETURN_TYPES = (AlwaysEqualProxy("*"),)
+    INPUT_IS_LIST = (True, )
+    FUNCTION = "to"
+    CATEGORY = CATEGORY
+
+    def to(self, any):
+        return (any,)
