@@ -549,3 +549,38 @@ class List2AnyNode:
 
     def to(self, any):
         return (any,)
+    
+class SortImagesNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "images": ("IMAGE",),
+            },
+            "optional": {
+                "indices": ("INT", {"forceInput": True}),
+                "reverse": ("BOOLEAN", {"default": False}),
+                "sort_by": (["sum","mean","median","min","max"],{"default": "sum"})
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "INT")
+    RETURN_NAMES = ("images", "indices")
+    FUNCTION = "execute"
+    CATEGORY = CATEGORY
+
+    def execute(self, images, indices=None, reverse=False, sort_by="sum"):
+        if sort_by=="mean": func=np.mean
+        elif sort_by=="median": func=np.median
+        elif sort_by=="min": func=np.amin
+        elif sort_by=="max": func=np.amax
+        else: func=np.sum
+        values = list(map(lambda x: func(x.numpy()),images))
+        if indices is None:
+            indices = np.argsort(values)
+        if reverse: indices=indices[::-1]
+        indices = list(indices)
+        return (images[indices],indices)

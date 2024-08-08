@@ -3,7 +3,7 @@ from .custom_nodes.uvr import UVR5Node
 from .custom_nodes.rvc import RVCNode
 from .custom_nodes.loaders import DownloadAudio, LoadAudio, LoadWhisperModelNode, LoadRVCModelNode, LoadHubertModel, LoadPitchExtractionParams
 from .custom_nodes.output import PreviewAudio
-from .custom_nodes.utils import Any2ListNode, AudioBatchValueNode, List2AnyNode, MergeImageBatches, MergeLatentBatches, ImageRepeatInterleavedNode, LatentRepeatInterleavedNode, MergeAudioNode, SimpleMathNode, SliceNode, ZipImagesNode
+from .custom_nodes.utils import Any2ListNode, AudioBatchValueNode, List2AnyNode, MergeImageBatches, MergeLatentBatches, ImageRepeatInterleavedNode, LatentRepeatInterleavedNode, MergeAudioNode, SimpleMathNode, SliceNode, SortImagesNode, ZipImagesNode
 
 # Set the web directory, any .js file in that directory will be loaded by the frontend as a frontend extension
 WEB_DIRECTORY = "./web"
@@ -32,7 +32,8 @@ NODE_CLASS_MAPPINGS = {
     "SliceNode": SliceNode,
     "ZipNode": ZipImagesNode,
     "Any2ListNode": Any2ListNode,
-    "List2AnyNode": List2AnyNode
+    "List2AnyNode": List2AnyNode,
+    "SortImagesNode": SortImagesNode
 }
 
 # A dictionary that contains the friendly/humanly readable titles for the nodes
@@ -59,4 +60,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ZipNode": "🌺Zip Images",
     "Any2ListNode": "🌺Any to List",
     "List2AnyNode": "🌺List to Any",
+    "SortImagesNode": "🌺Sort Images",
 }
