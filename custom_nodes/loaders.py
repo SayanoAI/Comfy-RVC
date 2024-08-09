@@ -1,17 +1,14 @@
-from io import BytesIO
 import os
-from pytube import YouTube
 from .settings import PITCH_EXTRACTION_OPTIONS
 from ..lib import BASE_MODELS_DIR
 from ..lib.model_utils import load_hubert
-from ..lib.utils import get_file_hash, get_filenames, get_hash, get_optimal_torch_device
+from ..lib.utils import get_filenames, get_hash, get_optimal_torch_device
 from .utils import model_downloader
 import torch
 import folder_paths
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 from ..vc_infer_pipeline import get_vc
 from .settings.downloader import RVC_DOWNLOAD_LINK, RVC_INDEX, RVC_MODELS, download_file
-from ..lib.audio import SUPPORTED_AUDIO, audio_to_bytes, load_input_audio
 from ..config import config
 
 input_path = folder_paths.get_input_directory()
@@ -213,80 +210,3 @@ class LoadWhisperModelNode:
     def IS_CHANGED(cls, model_id, max_new_tokens, chunk_length_s, batch_size):
         return get_hash(model_id, max_new_tokens, chunk_length_s, batch_size)
 
-class LoadAudio:
-    @classmethod
-    def INPUT_TYPES(cls):
-        input_dir = input_path
-        files = get_filenames(root=input_dir,exts=SUPPORTED_AUDIO,format_func=os.path.basename)
-        
-        return {
-            "required": {
-                "audio": (files,),
-                "sr": (["None",16000,44100,48000],{"default": "None"}),
-            }}
-
-    CATEGORY = CATEGORY
-
-    RETURN_TYPES = ("STRING","VHS_AUDIO")
-    RETURN_NAMES = ("audio_name","vhs_audio")
-    FUNCTION = "load_audio"
-
-    def load_audio(self, audio, sr):
-        audio_path = os.path.join(input_path,audio) #folder_paths.get_annotated_filepath(audio)
-        widgetId = get_hash(audio_path)
-        audio_name = os.path.basename(audio).split(".")[0]
-        sr = None if sr=="None" else int(sr)
-        audio = load_input_audio(audio_path,sr=sr)
-        return {"ui": {"preview": [{"filename": audio_name, "type": "input", "widgetId": widgetId}]}, "result": (audio_name, lambda:audio_to_bytes(*audio))}
-    
-    @classmethod
-    def IS_CHANGED(cls, audio, sr):
-        return get_hash(audio,sr)
-
-    
-class DownloadAudio:
-    @classmethod
-    def INPUT_TYPES(cls):
-        
-        return {
-            "required": {
-                "url": ("STRING", {"default": ""})
-            },
-            "optional": {
-                "sr": (["None",16000,44100,48000],{"default": "None"}),
-                "song_name": ("STRING",{"default": ""},)
-            }
-        }
-
-    CATEGORY = CATEGORY
-
-    RETURN_TYPES = ("STRING","VHS_AUDIO")
-    RETURN_NAMES = ("audio_name","vhs_audio")
-    FUNCTION = "download_audio"
-
-    def download_audio(self, url, sr="None", song_name=""):
-
-        assert "youtube" in url, "Please provide a valid youtube URL!"
-        widgetId = get_hash(url, sr)
-        sr = None if sr=="None" else int(sr)
-        audio_name = widgetId if song_name=="" else song_name
-        audio_path = os.path.join(input_path,f"{audio_name}.mp3")
-
-        if os.path.isfile(audio_path): input_audio = load_input_audio(audio_path,sr=sr)
-        else:
-            youtube_video = YouTube(url)
-            audio = youtube_video.streams.get_audio_only(subtype="mp4")
-            buffer = BytesIO()
-            audio.stream_to_buffer(buffer)
-            buffer.seek(0)
-            with open(audio_path,"wb") as f:
-                f.write(buffer.read())
-            buffer.close()
-            input_audio = load_input_audio(audio_path,sr=sr)
-            del buffer, audio
-
-        return {"ui": {"preview": [{"filename": os.path.basename(audio_path), "type": "input", "widgetId": widgetId}]}, "result": (audio_name, lambda:audio_to_bytes(*input_audio))}
-
-    @classmethod
-    def IS_CHANGED(cls, url, sr, song_name):
-        return get_hash(url,sr,song_name)

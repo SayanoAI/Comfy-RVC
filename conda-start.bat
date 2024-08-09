@@ -43,7 +43,7 @@ if %errorlevel% == 0 (
 	rem install CUDA torch
 	CALL pip install torch==2.0.1+cu118 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118
 	
-    CALL python main.py --disable-smart-memory --preview-method=taesd --force-fp16 --deterministic --use-pytorch-cross-attention
+    CALL python main.py --disable-smart-memory --preview-method=taesd --force-fp16 --use-pytorch-cross-attention
 ) else (
     echo Failed to activate environment...
 )

@@ -1,17 +1,13 @@
 import itertools
 import math
 import os
-from pprint import pprint
 import re
-import tempfile
 import torch
 import folder_paths
-from .settings import MERGE_OPTIONS
-from ..lib.utils import gc_collect, get_hash, get_merge_func
+from ..lib.utils import gc_collect
 from .settings.downloader import RVC_DOWNLOAD_LINK, download_file
 from ..lib import BASE_MODELS_DIR
 import numpy as np
-from ..lib.audio import MAX_INT16, audio_to_bytes, bytes_to_audio, load_input_audio, merge_audio, pad_audio, remix_audio, save_input_audio
 
 CATEGORY = "🌺RVC-Studio/utils"
 temp_path = folder_paths.get_temp_directory()
@@ -158,79 +154,6 @@ class MergeLatentBatches:
 
         print(f'Merged latents: {len(merged_latent["samples"])=} {merged_latent["batch_index"]=}')
         return (merged_latent,)
-        
-class AudioBatchValueNode:
-    def __init__(self):
-        pass
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "audio": ('VHS_AUDIO',),
-                "num_segments": ('INT', {"min": 2, "max": 128, "step": 1, "forceInput": True}),
-                "output_min": ('FLOAT', {'default': 0., "min": -1000., "max": 1000., "step": .01}),
-                "output_max": ('FLOAT', {'default': 1., "min": 0., "max": 1000., "step": .01}),
-                "norm": (["scale","tanh","sigmoid"], {"default": "scale"}),
-            },
-            "optional": {
-                "silence_threshold": ("INT", {"default": 1000, "min": 1, "max": MAX_INT16, "step": 1, "display": "slider"}),
-                "duration_list": ("INT", {"default": None, "min": 1, "forceInput": True}),
-                "print_output": ("BOOLEAN", {"default": False}),
-                "inverse": ("BOOLEAN", {"default": False}),
-            }
-        }
-
-    RETURN_TYPES = ("FLOAT","INT","INT")
-    RETURN_NAMES = ("FLOAT","INT","num_values")
-
-    FUNCTION = "get_frame_weights"
-
-    CATEGORY = CATEGORY
-
-    @staticmethod
-    def get_rms(audio): # root mean squared of audio segment
-        return np.sqrt(np.nanmean(audio**2))
-
-    def get_frame_weights(self, audio, num_segments, output_min, output_max, norm,
-                          silence_threshold=1000, duration_list=None, print_output=False, inverse=False):
-        assert output_max>=output_min, f"{output_max=} must be greater or equal to {output_min=}!"
-
-        audio_data = bytes_to_audio(audio())
-        audio,_ = remix_audio(audio_data,norm=True,to_int16=True)
-        num_values = int(num_segments)
-        audio_rms = np.nan_to_num(list(map(self.get_rms,np.array_split(audio.flatten()/silence_threshold, num_values))),nan=0)
-        audio_zscore = (audio_rms-audio_rms.mean())/audio_rms.std()
-        output_range = output_max-output_min
-
-        if norm=="tanh":
-            x_norm = np.tanh(audio_zscore) #tanh=-1 to 1
-            if inverse: x_norm*=-1
-            x_norm = (x_norm * output_range + output_max + output_min)/2
-        elif norm=="sigmoid":
-            x_norm = 1. / (1. + np.exp(-audio_zscore)) #sigmoid=0 to 1
-            if inverse: x_norm=1-x_norm
-            x_norm = x_norm * output_range + output_min 
-        else:
-            x_min = audio_zscore.min() 
-            x_norm = (audio_zscore - x_min) / (audio_zscore.max() - x_min) #scale=0 to 1
-            if inverse: x_norm=1-x_norm
-            x_norm = x_norm * output_range + output_min 
-
-        # batch_value = ",\n".join([f'{n}:({v})' for n,v in enumerate(x_norm)])
-        if print_output:
-            print(f"{audio_rms.min()=} {audio_rms.max()=} {audio_rms.mean()=} {len(audio_rms)=}")
-            print(f"{x_norm.min()=} {x_norm.max()=} {x_norm.mean()=} {len(x_norm)=}")
-        
-        if duration_list is not None:
-            segments = np.cumsum(duration_list)
-            x_norm = np.array_split(x_norm,segments)
-            x_norm = map(list,x_norm)
-            x_norm_int = [list(map(int,norms)) for norms in x_norm]
-        else:
-            x_norm_int = map(int,x_norm)
-
-        return (list(x_norm),list(x_norm_int),num_values)
     
 class ImageRepeatInterleavedNode:
     @classmethod
@@ -358,62 +281,6 @@ class LatentRepeatInterleavedNode:
         print(f"{len(latents)=} {num_latents=}")
 
         return (new_latents,num_latents)
-    
-class MergeAudioNode:
-   
-    def __init__(self):
-        pass
-    
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "audio1": ("VHS_AUDIO",),
-                "audio2": ("VHS_AUDIO",),
-            },
-            "optional": {
-                "sr": (["None",32000,40000,44100,48000],{
-                    "default": "None"
-                }),
-                "merge_type": (MERGE_OPTIONS,{"default": "median"}),
-                "normalize": ("BOOLEAN",{"default": True}),
-                "audio3_opt": ("VHS_AUDIO",{"default": None}),
-                "audio4_opt": ("VHS_AUDIO",{"default": None}),
-            }
-        }
-
-    RETURN_TYPES = ("VHS_AUDIO",)
-    RETURN_NAMES = ("vhs_audio",)
-
-    FUNCTION = "merge"
-
-    CATEGORY = CATEGORY
-
-    def merge(self, audio1, audio2, sr="None", merge_type="median", normalize=False, audio3_opt=None, audio4_opt=None):
-
-        audios = [audio() for audio in [audio1, audio2, audio3_opt, audio4_opt] if audio is not None]
-        widgetId = get_hash(*audios,sr,merge_type,normalize)
-        audio_path = os.path.join(temp_path,"preview",f"{widgetId}.flac")
-
-        if os.path.isfile(audio_path): merged_audio = load_input_audio(audio_path)
-        else:
-            input_audios = [bytes_to_audio(audio) for audio in audios]
-            merged_sr = min([sr for (_,sr) in input_audios]) if sr=="None" else sr
-            input_audios = [remix_audio(audio,merged_sr,norm=normalize) for audio in input_audios]
-            merge_func = get_merge_func(merge_type)
-            merged_audio = merge_func(pad_audio(*[audio for (audio,_) in input_audios],axis=0),axis=0), merged_sr
-            print(save_input_audio(audio_path,merged_audio))
-            del input_audios
-            if os.path.isfile(audio_path): merged_audio = load_input_audio(audio_path)
-            
-        del audios
-        audio_name = os.path.basename(audio_path)
-        return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda: audio_to_bytes(*merged_audio),)}
-    
-    @classmethod
-    def IS_CHANGED(cls, audio1, audio2, sr="None", merge_type="median", normalize=False, audio3_opt=None, audio4_opt=None):
-        audios = [audio() for audio in [audio1, audio2, audio3_opt, audio4_opt] if audio is not None]
-        return get_hash(sr, merge_type, normalize, *audios)
 
 class SimpleMathNode:
     def __init__(self):
