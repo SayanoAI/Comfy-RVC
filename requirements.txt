@@ -13,6 +13,6 @@ pyaudio
 spacy
 monotonic_align
 textacy
-pytube
 spacytextblob
 accelerate
+yt-dlp

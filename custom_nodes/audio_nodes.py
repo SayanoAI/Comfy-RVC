@@ -4,6 +4,7 @@ import os
 import shutil
 import numpy as np
 from pytube import YouTube
+import yt_dlp
 import torch
 from .settings import MERGE_OPTIONS
 from .utils import increment_filename_no_overwrite
@@ -64,7 +65,8 @@ class DownloadAudio:
             },
             "optional": {
                 "sr": (["None",16000,44100,48000],{"default": "None"}),
-                "song_name": ("STRING",{"default": ""},)
+                "song_name": ("STRING",{"default": ""},),
+                "format": (SUPPORTED_AUDIO,{"default": "mp3"})
             }
         }
 
@@ -74,32 +76,32 @@ class DownloadAudio:
     RETURN_NAMES = ("audio_name","vhs_audio","audio")
     FUNCTION = "download_audio"
 
-    def download_audio(self, url, sr="None", song_name=""):
+    def download_audio(self, url, sr="None", song_name="", format="mp3"):
 
         assert "youtube" in url, "Please provide a valid youtube URL!"
+
         widgetId = get_hash(url, sr)
         sr = None if sr=="None" else int(sr)
         audio_name = widgetId if song_name=="" else song_name
-        audio_path = os.path.join(input_path,f"{audio_name}.mp3")
+        audio_path = os.path.join(input_path,f"{audio_name}.{format}")
 
         if os.path.isfile(audio_path): input_audio = load_input_audio(audio_path,sr=sr)
         else:
-            youtube_video = YouTube(url)
-            audio = youtube_video.streams.get_audio_only(subtype="mp4")
-            buffer = BytesIO()
-            audio.stream_to_buffer(buffer)
-            buffer.seek(0)
-            with open(audio_path,"wb") as f:
-                f.write(buffer.read())
-            buffer.close()
+            ydl_opts = {
+                'format': 'bestaudio/best',  # Download the best audio quality available
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': "flac",
+                }],
+                'outtmpl': os.path.splitext(audio_path)[0],  # Output file name and directory
+            }
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+
             input_audio = load_input_audio(audio_path,sr=sr)
-            del buffer, audio
 
-        return {"ui": {"preview": [{"filename": os.path.basename(audio_path), "type": "input", "widgetId": widgetId}]}, "result": (audio_name, lambda:audio_to_bytes(*input_audio),to_audio_dict(*audio))}
-
-    @classmethod
-    def IS_CHANGED(cls, url, sr, song_name):
-        return get_hash(url,sr,song_name)
+        return {"ui": {"preview": [{"filename": os.path.basename(audio_path), "type": "input", "widgetId": widgetId}]}, "result": (audio_name, lambda:audio_to_bytes(*input_audio),to_audio_dict(*input_audio))}
     
 class MergeAudioNode:
    
@@ -151,11 +153,6 @@ class MergeAudioNode:
         del audios
         audio_name = os.path.basename(audio_path)
         return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda: audio_to_bytes(*merged_audio),to_audio_dict(*merged_audio))}
-    
-    @classmethod
-    def IS_CHANGED(cls, audio1, audio2, sr, merge_type, normalize, audio3_opt=None, audio4_opt=None):
-        audios = [audio() for audio in [audio1, audio2, audio3_opt, audio4_opt] if audio is not None]
-        return get_hash(sr, merge_type, normalize, *audios)
     
 class PreviewAudio:
     def __init__(self):
