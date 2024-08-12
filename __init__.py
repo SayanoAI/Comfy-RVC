@@ -1,8 +1,7 @@
 from .custom_nodes.audio_nodes import LoadAudio, PreviewAudio, MergeAudioNode, DownloadAudio, AudioBatchValueNode
-from .custom_nodes.stt import AudioTranscriptionNode, BatchedTranscriptionEncoderNode
+from .custom_nodes.stt import AudioTranscriptionNode, BatchedTranscriptionEncoderNode, LoadWhisperModelNode
 from .custom_nodes.uvr import UVR5Node
-from .custom_nodes.rvc import RVCNode
-from .custom_nodes.loaders import LoadWhisperModelNode, LoadRVCModelNode, LoadHubertModel, LoadPitchExtractionParams
+from .custom_nodes.rvc import LoadHubertModel, LoadPitchExtractionParams, LoadRVCModelNode, RVCNode
 from .custom_nodes.utils import Any2ListNode, List2AnyNode, MergeImageBatches, MergeLatentBatches, ImageRepeatInterleavedNode, LatentRepeatInterleavedNode, SimpleMathNode, SliceNode, SortImagesNode, ZipImagesNode
 
 # Set the web directory, any .js file in that directory will be loaded by the frontend as a frontend extension

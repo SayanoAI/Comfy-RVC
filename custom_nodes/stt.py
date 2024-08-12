@@ -3,7 +3,7 @@ import os
 from pprint import pprint
 import subprocess
 import sys
-
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 import numpy as np
 import torch
 
@@ -11,7 +11,7 @@ from .settings import SUPPORTED_LANGUAGES
 
 from ..lib import BASE_CACHE_DIR, BASE_MODELS_DIR
 from .utils import increment_filename_no_overwrite
-from ..lib.utils import get_hash
+from ..lib.utils import get_hash, get_optimal_torch_device
 import folder_paths
 from ..lib.audio import bytes_to_audio, remix_audio
 import spacy
@@ -101,6 +101,73 @@ def init_spacy_model(language="en",use_sentiment=False):
     spacy.tokens.Doc.set_extension("sentiment", default="", force=True)
 
     return model
+
+   
+class LoadWhisperModelNode:
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        model_ids = [
+            'openai/whisper-large-v3',
+            'openai/whisper-large-v2',
+            'openai/whisper-large',
+            'openai/whisper-medium',
+            'openai/whisper-small',
+            'openai/whisper-base',
+            'openai/whisper-tiny',
+            'openai/whisper-medium.en',
+            'openai/whisper-small.en',
+            'openai/whisper-base.en',
+            'openai/whisper-tiny.en',
+        ]
+        return {
+            'required': {
+                'model_id': (model_ids,{"default": "openai/whisper-base.en"}),
+            },
+            "optional": {
+                "max_new_tokens": ("INT", {"default": 128, "min": 16, "max": 1024, "display": "slider"}),
+                "chunk_length_s": ("INT", {"default": 30, "min": 15, "max": 60, "display": "slider"}),
+                "batch_size": ("INT", {"default": 16, "min": 1, "max": 128, "display": "slider"}),
+            }
+        }
+
+    RETURN_TYPES = ('TRANSCRIPTION_MODEL', )
+    RETURN_NAMES = ('model', )
+
+    CATEGORY = CATEGORY
+
+    FUNCTION = 'load_model'
+
+
+    def load_model(self, model_id, max_new_tokens=128, chunk_length_s=12, batch_size=16):
+        device = get_optimal_torch_device()
+        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+        )
+        processor = AutoProcessor.from_pretrained(model_id)
+        model.to(device)
+
+        # generate_kwargs = {}
+
+        def pipe(): return pipeline(
+                'automatic-speech-recognition',
+                model=model,
+                tokenizer=processor.tokenizer,
+                feature_extractor=processor.feature_extractor,
+                max_new_tokens=max_new_tokens,
+                chunk_length_s=chunk_length_s,
+                batch_size=batch_size,
+                return_timestamps=True,
+                torch_dtype=torch_dtype,
+                device=device,
+            )
+        return ([pipe,model_id], )
+    
+    @classmethod
+    def IS_CHANGED(cls, model_id, max_new_tokens, chunk_length_s, batch_size):
+        return get_hash(model_id, max_new_tokens, chunk_length_s, batch_size)
 
 class AudioTranscriptionNode:
     def __init__(self):
