@@ -16,3 +16,4 @@ textacy
 spacytextblob
 accelerate
 yt-dlp
+deep-translator

@@ -14,29 +14,30 @@ from .utils import increment_filename_no_overwrite
 from ..lib.utils import get_hash
 import folder_paths
 from ..lib.audio import bytes_to_audio, remix_audio
-import textacy
-from textacy.extract import keyterms as kt
+import spacy
+
+SPACY_LANGUAGE_MODEL_MAP = {
+    "en": "en_core_web_md",
+    "fr": "fr_core_news_md",
+    "es": "es_core_news_md",
+    "ja": "ja_core_news_md",
+    "zh": "zh_core_web_md",
+}
 
 temp_path = folder_paths.get_temp_directory()
 CATEGORY = "🌺RVC-Studio/stt"
 
-def extract_keywords(text: str, max_words: int, spacy_model, use_sentiment=False, prefix="", suffix="", weights=1., **kwargs):
-    text = text.strip()
-    sentiment = ""
-    if use_sentiment:
-        from spacytextblob.spacytextblob import SpacyTextBlob
-        doc = spacy_model(text)
-        polarity = SpacyTextBlob(spacy_model).get_polarity(doc)
-        if polarity<-.5: sentiment="sad, tears"
-        elif polarity<-.2: sentiment="sad"
-        elif polarity>.5: sentiment="happy, smile"
-        elif polarity>.2: sentiment="slight smile"
-    doc = textacy.make_spacy_doc(text, lang=spacy_model)
+def extract_keywords(text: str, max_words: int, spacy_model, prefix="", suffix="", weights=1., **kwargs):
+    
+    doc = spacy_model(text)
+    text = doc._.text.strip().replace('"','')
+    sentiment = doc._.sentiment
     topn = int(max_words) if max_words>0 else len(text)
     include_pos = ["NOUN","ADJ","PROPN","VERB","NUM","ADP"]
     ngrams = [1,2]
     tags = []
     try:
+        from textacy.extract import keyterms as kt
         terms = kt.sgrank(doc, ngrams=ngrams, normalize="lower", topn=topn, include_pos=include_pos)
         tags = list(map(lambda v:v[0],sorted(terms,key=lambda v:v[1],reverse=True)[:topn]))
     except Exception as error:
@@ -46,22 +47,60 @@ def extract_keywords(text: str, max_words: int, spacy_model, use_sentiment=False
     if len(tags) and weights!=1.: tags = f"({tags}:{weights:.3f})"
     return ", ".join(filter(None,[prefix,tags,sentiment,suffix])).strip()
 
-def limit_sentence(text: str, max_words: int, spacy_model, use_sentiment=False, prefix="", suffix="", weights=1., **kwargs):
-    text = text.strip()
-    sentiment = ""
-    if use_sentiment:
-        from spacytextblob.spacytextblob import SpacyTextBlob
-        doc = spacy_model(text)
-        polarity = SpacyTextBlob(spacy_model).get_polarity(doc)
-        if polarity<-.5: sentiment="sad, tears"
-        elif polarity<-.2: sentiment="sad"
-        elif polarity>.5: sentiment="happy, smile"
-        elif polarity>.2: sentiment="slight smile"
+def limit_sentence(text: str, max_words: int, spacy_model, prefix="", suffix="", weights=1., **kwargs):
+    doc = spacy_model(text)
+    text = doc._.text.strip().replace('"','')
+    sentiment = doc._.sentiment
     topn = int(max_words) if max_words>0 else len(text)
     if topn>0: text = " ".join(text.split()[:topn])
     if len(text) and weights!=1.: text = f"({text}:{weights:.3f})"
         
     return ", ".join(filter(None,[prefix,text,sentiment,suffix])).strip()
+
+def init_spacy_model(language="en",use_sentiment=False):
+    model_name = SPACY_LANGUAGE_MODEL_MAP.get(language,"en_core_web_md")
+    model_path = os.path.join(BASE_MODELS_DIR,model_name)
+    
+    if not os.path.exists(model_path):
+        subprocess.check_call([sys.executable, "-m", "spacy", "download", model_name])
+        model = spacy.load(model_name)
+        model.to_disk(model_path)
+
+    model = spacy.load(model_path)
+
+    if language=="en": # default text
+        @spacy.Language.component("default_transformer")
+        def _(doc):
+            doc._.text = doc.text
+            return doc
+        model.add_pipe("default_transformer", last=True)
+    else: # google translated text
+        from deep_translator import GoogleTranslator
+        translator = GoogleTranslator(source='auto', target='en')
+        @spacy.Language.component("GoogleTranslator")
+        def _(doc):
+            doc._.text = translator.translate(doc.text) if doc.text else ""
+            return doc
+        model.add_pipe("GoogleTranslator", last=True)
+    if use_sentiment:
+        from spacytextblob.spacytextblob import SpacyTextBlob
+        @spacy.Language.component("SpacyTextBlobSentiment")
+        def _(doc):
+            polarity = SpacyTextBlob(model).get_polarity(doc)
+            if polarity<-.5: sentiment="sad, tears, crying"
+            elif polarity<-.05: sentiment="sad, tears"
+            elif polarity>.5: sentiment="happy, smile, laughing"
+            elif polarity>.05: sentiment="slight smile"
+            else: sentiment=""
+            doc._.sentiment = sentiment
+            return doc
+        model.add_pipe("SpacyTextBlobSentiment", last=True)
+
+    # Register the custom attributes with spaCy
+    spacy.tokens.Doc.set_extension("text", default="", force=True)
+    spacy.tokens.Doc.set_extension("sentiment", default="", force=True)
+
+    return model
 
 class AudioTranscriptionNode:
     def __init__(self):
@@ -190,28 +229,6 @@ class BatchedTranscriptionEncoderNode:
         cond, pooled = clip.encode_from_tokens(tokens, return_pooled=True)
         
         return text, duration, cond, pooled
-    
-    @staticmethod
-    def get_spacy_model(language="en"):
-        import spacy
-        spacy_model_map = {
-            "en": "en_core_web_md",
-            "fr": "fr_core_news_md",
-            "es": "es_core_news_md",
-            "ja": "ja_core_news_md",
-            "zh": "zh_core_web_md",
-        }
-        model_name = spacy_model_map[language]
-        model_path = os.path.join(BASE_MODELS_DIR,model_name)
-        
-        if not os.path.exists(model_path):
-            subprocess.check_call([sys.executable, "-m", "spacy", "download", model_name])
-            model = spacy.load(model_name)
-            model.to_disk(model_path)
-
-        model = spacy.load(model_path)
-
-        return model
 
     def get_prompt(
         self, transcription, clip, language="en", loop=False, use_tags=False, use_sentiment=False,
@@ -243,7 +260,7 @@ class BatchedTranscriptionEncoderNode:
             else: # replace final frame
                 total_chunks[-1] = last_chunk
 
-        spacy_model = self.get_spacy_model(language)
+        spacy_model = init_spacy_model(language,use_sentiment=use_sentiment)
 
         # split transcript into prompt based on timestamp
         # find length of each frame using timestamp
@@ -255,7 +272,6 @@ class BatchedTranscriptionEncoderNode:
             t, d, c, pc = self.process_text_chunks(ichunk,frame_interpolation,clip,
                                                    use_tags=use_tags,
                                                    weights=weights,
-                                                   use_sentiment=use_sentiment,
                                                    prefix=prefix,
                                                    suffix=suffix,
                                                    spacy_model=spacy_model,
@@ -272,9 +288,10 @@ class BatchedTranscriptionEncoderNode:
         final_conditioning = torch.nested.to_padded_tensor(torch.nested.nested_tensor(cond, dtype=torch.float32),0)
         print(f"{final_conditioning.shape=} {final_pooled_output.shape=}")
         conditioning = [[final_conditioning,{"pooled_output": final_pooled_output}]]
-        batch_prompt_text = [f'"{i if frame_interpolation==0 else i*frame_interpolation}": "{text}"' for text in text_list]
+        cumsum = [0,*np.cumsum(duration_list)]
+        batch_prompt_text = [f'"{int(cumsum[i])}": "{text}"' for i,text in enumerate(text_list)]
         batch_prompt_text = ",\n".join(batch_prompt_text)
-        del pooled, cond
+        del pooled, cond, spacy_model
 
         if print_output:
             print(f"{batch_prompt_text=}")
