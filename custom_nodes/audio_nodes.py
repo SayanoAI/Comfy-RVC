@@ -7,7 +7,7 @@ from pytube import YouTube
 import yt_dlp
 import torch
 from .settings import MERGE_OPTIONS
-from .utils import increment_filename_no_overwrite
+from .utils import MultipleTypeProxy, increment_filename_no_overwrite
 from ..lib.audio import MAX_INT16, SUPPORTED_AUDIO, audio_to_bytes, bytes_to_audio, load_input_audio, pad_audio, remix_audio, save_input_audio
 from ..lib.utils import get_filenames, get_hash, get_merge_func
 import folder_paths
@@ -16,8 +16,15 @@ CATEGORY = "🌺RVC-Studio/audio"
 input_path = folder_paths.get_input_directory()
 temp_path = folder_paths.get_temp_directory()
 
+def get_audio(audio):
+    if hasattr(audio,"__call__"): #VHS_AUDIO is a function
+        return bytes_to_audio(audio())
+    else: #comfyui AUDIO is a dict
+        return audio["waveform"].squeeze(0).transpose(0,1).numpy(), audio["sample_rate"]
+
 def to_audio_dict(audio, sr):
     #from https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite/blob/bf2a9402d0b2727c7170c43621d569f4d531015f/videohelpersuite/nodes.py#L706C22-L706C67
+    
     waveform = torch.from_numpy(audio).reshape((-1,audio.ndim)).transpose(0,1).unsqueeze(0) 
     print(f"{waveform.shape=} {waveform.ndim=} {audio.shape=} {audio.ndim=}")
     return dict(waveform=waveform,sample_rate=sr)
@@ -112,8 +119,8 @@ class MergeAudioNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio1": ("VHS_AUDIO",),
-                "audio2": ("VHS_AUDIO",),
+                "audio1": (MultipleTypeProxy('AUDIO,VHS_AUDIO'),),
+                "audio2": (MultipleTypeProxy('AUDIO,VHS_AUDIO'),),
             },
             "optional": {
                 "sr": (["None",32000,40000,44100,48000],{
@@ -121,8 +128,8 @@ class MergeAudioNode:
                 }),
                 "merge_type": (MERGE_OPTIONS,{"default": "median"}),
                 "normalize": ("BOOLEAN",{"default": True}),
-                "audio3_opt": ("VHS_AUDIO",{"default": None}),
-                "audio4_opt": ("VHS_AUDIO",{"default": None}),
+                "audio3_opt": (MultipleTypeProxy('AUDIO,VHS_AUDIO'),{"default": None}),
+                "audio4_opt": (MultipleTypeProxy('AUDIO,VHS_AUDIO'),{"default": None}),
             }
         }
 
@@ -135,13 +142,13 @@ class MergeAudioNode:
 
     def merge(self, audio1, audio2, sr="None", merge_type="median", normalize=False, audio3_opt=None, audio4_opt=None):
 
-        audios = [audio() for audio in [audio1, audio2, audio3_opt, audio4_opt] if audio is not None]
-        widgetId = get_hash(*audios,sr,merge_type,normalize)
+        input_audios = [get_audio(audio) for audio in [audio1, audio2, audio3_opt, audio4_opt] if audio is not None]
+        widgetId = get_hash(*input_audios,sr,merge_type,normalize)
         audio_path = os.path.join(temp_path,"preview",f"{widgetId}.flac")
 
         if os.path.isfile(audio_path): merged_audio = load_input_audio(audio_path)
         else:
-            input_audios = [bytes_to_audio(audio) for audio in audios]
+            # input_audios = [bytes_to_audio(audio) for audio in audios]
             merged_sr = min([sr for (_,sr) in input_audios]) if sr=="None" else sr
             input_audios = [remix_audio(audio,merged_sr,norm=normalize) for audio in input_audios]
             merge_func = get_merge_func(merge_type)
@@ -149,8 +156,7 @@ class MergeAudioNode:
             print(save_input_audio(audio_path,merged_audio))
             del input_audios
             if os.path.isfile(audio_path): merged_audio = load_input_audio(audio_path)
-            
-        del audios
+                    
         audio_name = os.path.basename(audio_path)
         return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda: audio_to_bytes(*merged_audio),to_audio_dict(*merged_audio))}
     
@@ -162,7 +168,7 @@ class PreviewAudio:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio": ("VHS_AUDIO",),
+                "audio": (MultipleTypeProxy('AUDIO,VHS_AUDIO'),),
                 "filename": ("STRING",{"default": "test"}),
                 "save_format": (SUPPORTED_AUDIO,{"default": "flac"},),
                 "save_channels": ([1,2],{"default": 1}),
@@ -194,7 +200,7 @@ class PreviewAudio:
         if os.path.isfile(output_path) and not overwrite_existing:
             output_path = increment_filename_no_overwrite(output_path)
         
-        input_audio = bytes_to_audio(audio())
+        input_audio = get_audio(audio)
         print(save_input_audio(output_path,input_audio,to_int16=True,to_stereo=save_channels==2))
 
         tempdir = os.path.join(temp_path,"preview")
@@ -215,7 +221,7 @@ class AudioBatchValueNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "audio": ('VHS_AUDIO',),
+                "audio": (MultipleTypeProxy('AUDIO,VHS_AUDIO'),),
                 "num_segments": ('INT', {"min": 2, "max": 128, "step": 1, "forceInput": True}),
                 "output_min": ('FLOAT', {'default': 0., "min": -1000., "max": 1000., "step": .01}),
                 "output_max": ('FLOAT', {'default': 1., "min": 0., "max": 1000., "step": .01}),
@@ -244,7 +250,7 @@ class AudioBatchValueNode:
                           silence_threshold=1000, duration_list=None, print_output=False, inverse=False):
         assert output_max>=output_min, f"{output_max=} must be greater or equal to {output_min=}!"
 
-        audio_data = bytes_to_audio(audio())
+        audio_data = get_audio(audio)
         audio,_ = remix_audio(audio_data,norm=True,to_int16=True)
         num_values = int(num_segments)
         audio_rms = np.nan_to_num(list(map(self.get_rms,np.array_split(audio.flatten()/silence_threshold, num_values))),nan=0)

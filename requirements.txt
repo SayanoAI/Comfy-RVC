@@ -17,3 +17,8 @@ spacytextblob
 accelerate
 yt-dlp
 deep-translator
+openmim
+opencv-python
+soundfile
+openmim
+diffusers

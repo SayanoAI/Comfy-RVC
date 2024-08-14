@@ -35,6 +35,25 @@ def increment_filename_no_overwrite(proposed_path):
     output_path = os.path.join(output_dir, filename + f'_{this_file_number}.' + file_format)
     return output_path
 
+class MultipleTypeProxy(str):
+    def __eq__(self, other: str):
+        for o in other.split(","):
+            if o in self: return True
+        for s in self.split(","):
+            if s in other: return True
+        return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+    
+# FROM: https://github.com/theUpsider/ComfyUI-Logic/blob/master/nodes.py#L11
+class AlwaysEqualProxy(str):
+    def __eq__(self, _):
+        return True
+
+    def __ne__(self, _):
+        return False
+
 class MergeImageBatches:
     @classmethod
     def INPUT_TYPES(s):
@@ -290,8 +309,8 @@ class SimpleMathNode:
     def INPUT_TYPES(s):
         return {
             "optional": {
-                "n1": ("INT,FLOAT", { "default": None, "step": 0.1 }),
-                "n2": ("INT,FLOAT", { "default": None, "step": 0.1 }),
+                "n1": (MultipleTypeProxy("INT,FLOAT"), { "default": None, "step": 0.1 }),
+                "n2": (MultipleTypeProxy("INT,FLOAT"), { "default": None, "step": 0.1 }),
                 "round_up": ("BOOLEAN", {"default": False})
             },
             "required": {
@@ -322,14 +341,6 @@ class SimpleMathNode:
         if len(number)>1: # handles list inputs
             return (list(map(num_to_int,number)), list(map(float,number)),)
         else: return (num_to_int(number[0]), float(number[0]), )
-
-# FROM: https://github.com/theUpsider/ComfyUI-Logic/blob/master/nodes.py#L11
-class AlwaysEqualProxy(str):
-    def __eq__(self, _):
-        return True
-
-    def __ne__(self, _):
-        return False
     
 class SliceNode:
     def __init__(self):

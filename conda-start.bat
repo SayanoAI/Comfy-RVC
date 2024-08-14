@@ -39,6 +39,7 @@ if %errorlevel% == 0 (
     
 	rem install packages
     CALL pip install -r requirements.txt
+	CALL mim install mmengine mmcv>=2.0.1 mmdet>=3.1.0 mmpose>=1.1.0
 
 	rem install CUDA torch
 	CALL pip install torch==2.0.1+cu118 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118
