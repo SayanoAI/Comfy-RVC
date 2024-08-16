@@ -318,7 +318,7 @@ class SimpleMathNode:
             },
         }
 
-    RETURN_TYPES = ("INT", "FLOAT")
+    RETURN_TYPES = ("INT", "FLOAT", "STRING")
     FUNCTION = "do_math"
     CATEGORY = CATEGORY
 
@@ -339,8 +339,8 @@ class SimpleMathNode:
 
         num_to_int = math.ceil if round_up else math.floor
         if len(number)>1: # handles list inputs
-            return (list(map(num_to_int,number)), list(map(float,number)),)
-        else: return (num_to_int(number[0]), float(number[0]), )
+            return (list(map(num_to_int,number)), list(map(float,number)), list(map(str,number)))
+        else: return (num_to_int(number[0]), float(number[0]), str(number[0]))
     
 class SliceNode:
     def __init__(self):
