@@ -1,6 +1,10 @@
 import os
 import audio_separator.separator as uvr
-from ..lib.audio import audio_to_bytes, bytes_to_audio, save_input_audio, load_input_audio
+
+from .audio_nodes import get_audio
+
+from .utils import MultipleTypeProxy
+from ..lib.audio import audio_to_bytes, save_input_audio, load_input_audio
 import folder_paths
 from ..lib.utils import get_filenames, get_hash, get_optimal_torch_device
 from ..lib import BASE_CACHE_DIR, BASE_MODELS_DIR, karafan
@@ -24,7 +28,7 @@ class UVR5Node:
 
         return {
             "required": {
-                "audio": ("VHS_AUDIO",),
+                "audio": (MultipleTypeProxy('AUDIO,VHS_AUDIO'),),
                 "model": (model_list,{
                     "default": "UVR/HP5-vocals+instrumentals.pth"
                 }),
@@ -60,8 +64,8 @@ class UVR5Node:
             params = model_path, download_link
             if download_file(params): print(f"successfully downloaded: {model_path}")
         
-        input_audio = bytes_to_audio(audio())
-        hash_name = get_hash(audio(), model, agg, format)
+        input_audio = get_audio(audio)
+        hash_name = get_hash(model, agg, format, *input_audio)
         audio_path = os.path.join(temp_path,"uvr",f"{hash_name}.wav")
         primary_path = os.path.join(cache_dir,hash_name,f"primary.{format}")
         secondary_path = os.path.join(cache_dir,hash_name,f"secondary.{format}")
@@ -110,7 +114,3 @@ class UVR5Node:
                     secondary = load_input_audio(secondary_path)
         
         return (lambda:audio_to_bytes(*primary), lambda:audio_to_bytes(*secondary))
-
-    # @classmethod
-    # def IS_CHANGED(cls, *args, **kwargs):
-    #     return get_hash(*args,*kwargs.items())
