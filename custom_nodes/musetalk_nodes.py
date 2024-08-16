@@ -30,17 +30,17 @@ out_path = folder_paths.get_output_directory()
 temp_path = folder_paths.get_temp_directory()
 project_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-def tensor_to_opencv(tensor_image):
-    numpy_image = tensor_image.numpy()
+def tensor_to_opencv(tensor_image: torch.Tensor):
+    numpy_image = tensor_image.detach().numpy()
     if numpy_image.max()<=1: numpy_image *= 255
     opencv_image = cv2.cvtColor(numpy_image.astype(np.uint8), cv2.COLOR_RGB2BGR)
     opencv_image
     return opencv_image
 
-def process_frame(i, res_frame, coord_list_cycle, frame_list_cycle, results_dir, fp_model):
+def process_frame(i, res_frame, coord_list_cycle, frame_list_cycle, frames_dir, results_dir, fp_model):
     bbox = coord_list_cycle[i % (len(coord_list_cycle))]
-    bbox = tuple(map(int, bbox))
-    ori_frame = copy.deepcopy(frame_list_cycle[i % (len(frame_list_cycle))])
+    bbox = list(map(int, bbox))
+    ori_frame = cv2.imread(os.path.join(frames_dir,frame_list_cycle[i % (len(frame_list_cycle))]))
     x1, y1, x2, y2 = bbox
     
     try:
@@ -49,17 +49,21 @@ def process_frame(i, res_frame, coord_list_cycle, frame_list_cycle, results_dir,
         cv2.imwrite(os.path.join(results_dir, f"{str(i).zfill(8)}.png"), combined_frame)
     except Exception as error:
         print(f"{error=}")
+
+def get_imagefiles(directory_path):
+    assert os.path.isdir(directory_path), f"{directory_path} is not a directory!"
+
+    files = sorted(fname for fname in os.listdir(directory_path) if fname.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff')))    
+
+    assert len(files)>0, f"{directory_path} is empty!"
+    return files
         
 def load_images_from_directory(directory_path):
     image_list = []
     img_size = None
     img_to_tensor = TT.ToTensor()
 
-    assert os.path.isdir(directory_path), f"{directory_path} is not a directory!"
-
-    files = sorted(fname for fname in os.listdir(directory_path) if fname.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff')))    
-
-    assert len(files)>0, f"{directory_path} is empty!"
+    files = get_imagefiles(directory_path)
     
     # Iterate over all files in the directory
     for filename in tqdm(files):
@@ -138,8 +142,8 @@ class MuseImageFeatureExtractionNode:
 
     CATEGORY = CATEGORY
 
-    RETURN_TYPES = ("COORDS","FRAMES")
-    RETURN_NAMES = ("coords","frames")
+    RETURN_TYPES = ("COORDS","STRING")
+    RETURN_NAMES = ("coords","frames_dir")
     FUNCTION = "process"
 
     @staticmethod
@@ -159,34 +163,35 @@ class MuseImageFeatureExtractionNode:
     def process(self, images, bbox_detector, threshold=.5, dilation=0, use_cache=True):
         print("############################################## preprocess input image  ##############################################")
         cache_name = get_hash(images,bbox_detector,len(images),threshold,dilation)
-        crop_coord_save_path = os.path.join(BASE_CACHE_DIR,"musetalk",f"{cache_name}.json")
-       
+        frames_dir = os.path.join(temp_path,f"frames-{cache_name}")
+        crop_coord_save_path = os.path.join(BASE_CACHE_DIR,"musetalk",f"coords-{cache_name}.json")
 
-        if os.path.exists(crop_coord_save_path) and use_cache:
+        if os.path.isfile(crop_coord_save_path) and os.path.isdir(frames_dir) and use_cache:
             print("using extracted coordinates")
             with open(crop_coord_save_path,'r') as f:
                 data = json.load(f)
             coord_list = data["coord_list"]
         else:
+            os.makedirs(frames_dir,exist_ok=True)
             print("extracting landmarks...time consuming")
             coord_list = []
             has_face = False
-            for image in tqdm(images):
+            for i,image in enumerate(tqdm(images.cpu())):
                 mask = bbox_detector.detect_combined(image.unsqueeze(0), threshold, dilation)
                 if mask is not None: has_face=True
                 coords = self.mask_to_bbox(mask)
                 coord_list.append(coords)
+                cv2.imwrite(os.path.join(frames_dir, f"{str(i).zfill(8)}.png"), tensor_to_opencv(image))
             assert has_face, "No face detected!"
 
             if use_cache:
                 os.makedirs(os.path.dirname(crop_coord_save_path),exist_ok=True)
                 with open(crop_coord_save_path, 'w') as f:
                     json.dump(dict(coord_list=coord_list), f)
-        
-        frame_list = [tensor_to_opencv(img.detach().clone()) for img in images]
+                
         gc_collect()
 
-        return (coord_list, frame_list)
+        return (coord_list, frames_dir)
     
 class MuseTalkNode:
 
@@ -198,7 +203,7 @@ class MuseTalkNode:
         return {
             "required": {
                 "coord_list": ("COORDS",),
-                "frame_list": ("FRAMES",),
+                "frames_dir": ("STRING",{"default": ""}),
                 "whisper_chunks": ("WHISPER_CHUNKS",)
             },
              "optional": {
@@ -212,8 +217,9 @@ class MuseTalkNode:
     RETURN_NAMES = ("images","results_dir")
     FUNCTION = "process"
 
-    def process(self, coord_list, frame_list, whisper_chunks, batch_size=1):
-        results_dir = os.path.join(temp_path,get_hash(coord_list, frame_list, whisper_chunks))
+    def process(self, coord_list, frames_dir, whisper_chunks, batch_size=1):
+        frame_list = get_imagefiles(frames_dir)
+        results_dir = os.path.join(temp_path,f"results-{get_hash(coord_list, whisper_chunks, *frame_list)}")
 
         if not os.path.isdir(results_dir) or len(os.listdir(results_dir))==0:
             os.makedirs(results_dir,exist_ok=True)
@@ -226,6 +232,7 @@ class MuseTalkNode:
             input_latent_list = []
             for bbox, frame in tqdm(zip(coord_list, frame_list)):
                 bbox = list(map(int,bbox))
+                frame = cv2.imread(os.path.join(frames_dir,frame))
                 if sum(bbox) == 0:
                     print(f"No face detected: {bbox}")
                     continue
@@ -247,10 +254,10 @@ class MuseTalkNode:
             unet = UNet(unet_config=unet_config,model_path=unet_model,use_float16=True)
             pe = PositionalEncoding(d_model=384)
             video_num = len(whisper_chunks)
-            gen = datagen(whisper_chunks,input_latent_list_cycle,batch_size)
+            dataset = datagen(whisper_chunks,input_latent_list_cycle,batch_size)
             res_frame_list = []
             timestep = torch.tensor([0], device=unet.device)
-            for (whisper_batch,latent_batch) in tqdm(gen,total=int(np.ceil(float(video_num)/batch_size))):
+            for (whisper_batch,latent_batch) in tqdm(dataset,total=int(np.ceil(float(video_num)/batch_size))):
                 tensor_list = [torch.FloatTensor(arr) for arr in whisper_batch]
                 audio_feature_batch = torch.stack(tensor_list) # torch, B, 5*N,384
                 audio_feature_batch = pe(audio_feature_batch)
@@ -259,8 +266,7 @@ class MuseTalkNode:
                 recon = vae.decode_latents(pred_latents)
                 for res_frame in recon:
                     res_frame_list.append(res_frame)
-                    # res_frame_list.append(cv2_to_tensor(res_frame))
-            del pe, unet, vae
+            del pe, unet.model, vae, unet
             gc_collect()
 
             print("############################################## pad to full image ##############################################")
@@ -270,7 +276,7 @@ class MuseTalkNode:
 
             with ThreadPool(batch_size) as pool:
                 for i, res_frame in enumerate(tqdm(res_frame_list)):
-                    pool.apply(process_frame, args=(i, res_frame, coord_list_cycle, frame_list_cycle, results_dir, fp_model))
+                    pool.apply(process_frame, args=(i, res_frame, coord_list_cycle, frame_list_cycle, frames_dir, results_dir, fp_model))
                 
             del fp_model, frame_list_cycle, res_frame_list, coord_list_cycle, input_latent_list
             gc_collect()
@@ -280,38 +286,6 @@ class MuseTalkNode:
         print(f"{images.shape=} {images.max()=} {images.dtype=}")
 
         return (images,results_dir)
-    
-class MuseFacePositioningNode:
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        
-        return {
-            "required": {
-                "audio": (MultipleTypeProxy("AUDIO,VHS_AUDIO"),),
-            },
-            "optional": {
-                "fps": (MultipleTypeProxy("FLOAT,INT"),{"default": 1.}),
-            }
-        }
-
-    CATEGORY = CATEGORY
-
-    RETURN_TYPES = ("WHISPER_CHUNKS",)
-    RETURN_NAMES = ("whisper_chunks",)
-    FUNCTION = "process"
-
-    def process(self, audio, fps):
-        print("############################################## extract audio feature ##############################################")
-        model_path = model_downloader("musetalk/whisper/tiny.pt")
-        audio_processor = Audio2Feature(model_path=model_path)
-        input_audio = get_audio(audio)
-        whisper_feature = audio_processor.audio2feat(np.array(input_audio[0],dtype=np.float32))
-        whisper_chunks = audio_processor.feature2chunks(feature_array=whisper_feature,fps=fps)
-        del audio_processor, whisper_feature, input_audio
-        gc_collect()
-
-        return (whisper_chunks,)
     
 NODE_CLASS_MAPPINGS = {
     "MuseTalkNode": MuseTalkNode,
