@@ -1,8 +1,8 @@
-from .custom_nodes.audio_nodes import LoadAudio, PreviewAudio, MergeAudioNode, DownloadAudio, AudioBatchValueNode
+from .custom_nodes.audio_nodes import NODE_CLASS_MAPPINGS as audio_nodes, NODE_DISPLAY_NAME_MAPPINGS as audio_nodes_name
 from .custom_nodes.stt import AudioTranscriptionNode, BatchedTranscriptionEncoderNode, LoadWhisperModelNode
 from .custom_nodes.uvr import UVR5Node
 from .custom_nodes.rvc import LoadHubertModel, LoadPitchExtractionParams, LoadRVCModelNode, RVCNode
-from .custom_nodes.utils import Any2ListNode, List2AnyNode, MergeImageBatches, MergeLatentBatches, ImageRepeatInterleavedNode, LatentRepeatInterleavedNode, SimpleMathNode, SliceNode, SortImagesNode, ZipImagesNode
+from .custom_nodes.utility_nodes import NODE_CLASS_MAPPINGS as utility_nodes, NODE_DISPLAY_NAME_MAPPINGS as utility_nodes_name
 from .custom_nodes.musetalk_nodes import NODE_CLASS_MAPPINGS as musetalk_nodes, NODE_DISPLAY_NAME_MAPPINGS as musetalk_nodes_name
 # Set the web directory, any .js file in that directory will be loaded by the frontend as a frontend extension
 WEB_DIRECTORY = "./web"
@@ -11,55 +11,29 @@ WEB_DIRECTORY = "./web"
 # NOTE: names should be globally unique
 NODE_CLASS_MAPPINGS = {
     "UVR5Node": UVR5Node,
-    "RVC-Studio.LoadAudio": LoadAudio,
-    "RVC-Studio.PreviewAudio": PreviewAudio,
-    "MergeAudioNode": MergeAudioNode,
     "AudioTranscriptionNode": AudioTranscriptionNode,
     "LoadWhisperModelNode": LoadWhisperModelNode,
     "LoadRVCModelNode": LoadRVCModelNode,
     "RVCNode": RVCNode,
     "LoadHubertModel": LoadHubertModel,
     "LoadPitchExtractionParams": LoadPitchExtractionParams,
-    "AudioBatchValueNode": AudioBatchValueNode,
-    "MergeImageBatches": MergeImageBatches,
-    "MergeLatentBatches": MergeLatentBatches,
-    "ImageRepeatInterleavedNode": ImageRepeatInterleavedNode,
-    "LatentRepeatInterleavedNode": LatentRepeatInterleavedNode,
-    "DownloadAudio": DownloadAudio,
     "BatchedTranscriptionEncoderNode": BatchedTranscriptionEncoderNode,
-    "SimpleMathNode": SimpleMathNode,
-    "SliceNode": SliceNode,
-    "ZipNode": ZipImagesNode,
-    "Any2ListNode": Any2ListNode,
-    "List2AnyNode": List2AnyNode,
-    "SortImagesNode": SortImagesNode,
-    **musetalk_nodes
+    **audio_nodes,
+    **musetalk_nodes,
+    **utility_nodes
 }
 
 # A dictionary that contains the friendly/humanly readable titles for the nodes
 NODE_DISPLAY_NAME_MAPPINGS = {
     "UVR5Node": "🌺Vocal Removal",
-    "RVC-Studio.LoadAudio": "🌺Load Audio",
-    "DownloadAudio": "🌺Youtube Downloader",
-    "RVC-Studio.PreviewAudio": "🌺Preview Audio",
     "AudioTranscriptionNode": "🌺Transcribe Audio",
     "LoadWhisperModelNode": "🌺Load Whisper Model",
     "LoadRVCModelNode": "🌺Load RVC Model",
     "RVCNode": "🌺Voice Changer",
     "LoadHubertModel": "🌺Load Hubert Model",
     "LoadPitchExtractionParams": "🌺Load Pitch Extraction Params",
-    "MergeAudioNode": "🌺Merge Audio",
-    "AudioBatchValueNode": "🌺Audio RMS Batch Values",
-    "MergeImageBatches": "🌺Merge Image Batches",
-    "MergeLatentBatches": "🌺Merge Latent Batches",
-    "ImageRepeatInterleavedNode": "🌺Image Repeat Interleaved",
-    "LatentRepeatInterleavedNode": "🌺Latent Repeat Interleaved",
     "BatchedTranscriptionEncoderNode": "🌺Batched CLIP Transcription Encode (Prompt)",
-    "SimpleMathNode": "🌺Simple Math Operations",
-    "SliceNode": "🌺Slice Array",
-    "ZipNode": "🌺Zip Images",
-    "Any2ListNode": "🌺Any to List",
-    "List2AnyNode": "🌺List to Any",
-    "SortImagesNode": "🌺Sort Images",
-    **musetalk_nodes_name
+    **audio_nodes_name,
+    **musetalk_nodes_name,
+    **utility_nodes_name
 }

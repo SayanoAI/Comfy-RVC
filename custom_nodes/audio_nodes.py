@@ -285,3 +285,19 @@ class AudioBatchValueNode:
             x_norm_int = map(int,x_norm)
 
         return (list(x_norm),list(x_norm_int),num_values)
+    
+NODE_CLASS_MAPPINGS = {
+    "RVC-Studio.LoadAudio": LoadAudio,
+    "RVC-Studio.PreviewAudio": PreviewAudio,
+    "MergeAudioNode": MergeAudioNode,
+    "AudioBatchValueNode": AudioBatchValueNode,
+    "DownloadAudio": DownloadAudio,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "RVC-Studio.LoadAudio": "🌺Load Audio",
+    "DownloadAudio": "🌺Youtube Downloader",
+    "RVC-Studio.PreviewAudio": "🌺Preview Audio",
+    "MergeAudioNode": "🌺Merge Audio",
+    "AudioBatchValueNode": "🌺Audio RMS Batch Values",
+}
