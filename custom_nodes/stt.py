@@ -366,3 +366,18 @@ class BatchedTranscriptionEncoderNode:
             print(f"{num_chunks=}, {max_chunks=}, {num_frames=}")
 
         return (conditioning, batch_prompt_text, list(map(int,duration_list)), num_chunks, num_frames, text_list)
+    
+# A dictionary that contains all nodes you want to export with their names
+# NOTE: names should be globally unique
+NODE_CLASS_MAPPINGS = {
+    "AudioTranscriptionNode": AudioTranscriptionNode,
+    "LoadWhisperModelNode": LoadWhisperModelNode,
+    "BatchedTranscriptionEncoderNode": BatchedTranscriptionEncoderNode
+}
+
+# A dictionary that contains the friendly/humanly readable titles for the nodes
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "AudioTranscriptionNode": "🌺Transcribe Audio",
+    "LoadWhisperModelNode": "🌺Load Whisper Model",
+    "BatchedTranscriptionEncoderNode": "🌺Batched CLIP Transcription Encode (Prompt)",
+}

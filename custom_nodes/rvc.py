@@ -208,6 +208,20 @@ class RVCNode:
         preview_file = os.path.join(tempdir,audio_name)
         if not os.path.isfile(preview_file): shutil.copyfile(cache_name,preview_file)
         return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda:audio_to_bytes(*output_audio),)}
-
     
+# A dictionary that contains all nodes you want to export with their names
+# NOTE: names should be globally unique
+NODE_CLASS_MAPPINGS = {
+    "LoadRVCModelNode": LoadRVCModelNode,
+    "RVCNode": RVCNode,
+    "LoadHubertModel": LoadHubertModel,
+    "LoadPitchExtractionParams": LoadPitchExtractionParams,
+}
 
+# A dictionary that contains the friendly/humanly readable titles for the nodes
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "LoadRVCModelNode": "🌺Load RVC Model",
+    "RVCNode": "🌺Voice Changer",
+    "LoadHubertModel": "🌺Load Hubert Model",
+    "LoadPitchExtractionParams": "🌺Load Pitch Extraction Params",
+}
