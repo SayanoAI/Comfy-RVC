@@ -1,9 +1,7 @@
 
-from io import BytesIO
 import os
 import shutil
 import numpy as np
-from pytube import YouTube
 import yt_dlp
 import torch
 from .settings import MERGE_OPTIONS
@@ -33,7 +31,8 @@ def to_audio_dict(audio, sr):
 class LoadAudio:
     @classmethod
     def INPUT_TYPES(cls):
-        input_dir = input_path
+        input_dir = os.path.join(input_path,"audio")
+        os.makedirs(input_dir,exist_ok=True)
         files = get_filenames(root=input_dir,exts=SUPPORTED_AUDIO,format_func=os.path.basename)
         
         return {
@@ -49,7 +48,7 @@ class LoadAudio:
     FUNCTION = "load_audio"
 
     def load_audio(self, audio, sr):
-        audio_path = os.path.join(input_path,audio) #folder_paths.get_annotated_filepath(audio)
+        audio_path = os.path.join(input_path,"audio",audio)
         widgetId = get_hash(audio_path)
         audio_name = os.path.basename(audio).split(".")[0]
         sr = None if sr=="None" else int(sr)
@@ -90,7 +89,9 @@ class DownloadAudio:
         widgetId = get_hash(url, sr)
         sr = None if sr=="None" else int(sr)
         audio_name = widgetId if song_name=="" else song_name
-        audio_path = os.path.join(input_path,f"{audio_name}.{format}")
+        input_dir = os.path.join(input_path,"audio")
+        os.makedirs(input_dir,exist_ok=True)
+        audio_path = os.path.join(input_dir,f"{audio_name}.{format}")
 
         if os.path.isfile(audio_path): input_audio = load_input_audio(audio_path,sr=sr)
         else:
@@ -135,6 +136,7 @@ class MergeAudioNode:
 
     RETURN_TYPES = ("VHS_AUDIO","AUDIO")
     RETURN_NAMES = ("vhs_audio","audio")
+    OUTPUT_NODE = True
 
     FUNCTION = "merge"
 
@@ -143,7 +145,7 @@ class MergeAudioNode:
     def merge(self, audio1, audio2, sr="None", merge_type="median", normalize=False, audio3_opt=None, audio4_opt=None):
 
         input_audios = [get_audio(audio) for audio in [audio1, audio2, audio3_opt, audio4_opt] if audio is not None]
-        widgetId = get_hash(*input_audios,sr,merge_type,normalize)
+        widgetId = get_hash(*[audio_to_bytes(*audio) for audio in input_audios],sr,merge_type,normalize)
         audio_path = os.path.join(temp_path,"preview",f"{widgetId}.flac")
 
         if os.path.isfile(audio_path): merged_audio = load_input_audio(audio_path)
@@ -271,7 +273,6 @@ class AudioBatchValueNode:
             if inverse: x_norm=1-x_norm
             x_norm = x_norm * output_range + output_min 
 
-        # batch_value = ",\n".join([f'{n}:({v})' for n,v in enumerate(x_norm)])
         if print_output:
             print(f"{audio_rms.min()=} {audio_rms.max()=} {audio_rms.mean()=} {len(audio_rms)=}")
             print(f"{x_norm.min()=} {x_norm.max()=} {x_norm.mean()=} {len(x_norm)=}")
@@ -297,7 +298,7 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "RVC-Studio.LoadAudio": "🌺Load Audio",
     "DownloadAudio": "🌺Youtube Downloader",
-    "RVC-Studio.PreviewAudio": "🌺Preview Audio",
+    "RVC-Studio.PreviewAudio": "🌺Save Audio",
     "MergeAudioNode": "🌺Merge Audio",
     "AudioBatchValueNode": "🌺Audio RMS Batch Values",
 }

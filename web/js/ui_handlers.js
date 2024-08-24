@@ -52,11 +52,8 @@ function addPreviewWidget(nodeType, nodeData, widgetName="audio", when="onNodeCr
 }
 
 function previewAudio(node,options={filename: null, type: "input", widgetName: "audio", widgetId: null}){
-    // while (node.widgets.length > 2){
-    //     node.widgets.pop();
-    // }
+    
     try {
-        console.log({node, options})
         var el = document.getElementById(options.widgetId);
         el?.remove();
     } catch (error) {
@@ -149,19 +146,19 @@ function chainCallback(object, property, callback) {
     }
 }
 
-async function uploadFile(file) {
+async function uploadFile(file,subfolder) {
     //TODO: Add uploaded file to cache with Cache.put()?
     try {
         // Wrap file in formdata so it includes filename
         const body = new FormData();
-        const i = file.webkitRelativePath.lastIndexOf('/');
-        const subfolder = file.webkitRelativePath.slice(0,i+1)
+        // const i = file.webkitRelativePath.lastIndexOf('/');
+        // const subfolder = file.webkitRelativePath.slice(0,i+1)
         const new_file = new File([file], file.name, {
             type: file.type,
             lastModified: file.lastModified,
         });
         body.append("image", new_file);
-        if (i > 0) {
+        if (subfolder) {
             body.append("subfolder", subfolder);
         }
         const resp = await api.fetchApi("/upload/image", {
@@ -252,7 +249,7 @@ function addUploadWidget(nodeType, nodeData, widgetName, type="video") {
                 style: "display: none",
                 onchange: async () => {
                     if (fileInput.files.length) {
-                        if (await uploadFile(fileInput.files[0]) != 200) {
+                        if (await uploadFile(fileInput.files[0],"audio") != 200) {
                             //upload failed and file can not be added to options
                             return;
                         }
@@ -266,7 +263,27 @@ function addUploadWidget(nodeType, nodeData, widgetName, type="video") {
                     }
                 },
             });
-        }else {
+        } else if (type == "zip") {
+            Object.assign(fileInput, {
+                type: "file",
+                accept: "application/zip",
+                style: "display: none",
+                onchange: async () => {
+                    if (fileInput.files.length) {
+                        if (await uploadFile(fileInput.files[0],"datasets") != 200) {
+                            //upload failed and file can not be added to options
+                            return;
+                        }
+                        const filename = fileInput.files[0].name;
+                        pathWidget.options.values.push(filename);
+                        pathWidget.value = filename;
+                        if (pathWidget.callback) {
+                            pathWidget.callback(filename)
+                        }
+                    }
+                },
+            });
+        } else {
             throw "Unknown upload type"
         }
         document.body.append(fileInput);
@@ -288,6 +305,9 @@ app.registerExtension({
                 case "RVC-Studio.LoadAudio": 
                     addUploadWidget(nodeType, nodeData, "audio", "audio")
                     addPreviewWidget(nodeType, nodeData, "audio", "onNodeCreated" )
+                    break
+                case "RVCProcessDatasetNode": 
+                    addUploadWidget(nodeType, nodeData, "dataset", "zip")
                     break
                 case "DownloadAudio":
                     addPreviewWidget(nodeType, nodeData, "audio", "onExecuted" )

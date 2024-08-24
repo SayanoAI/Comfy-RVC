@@ -41,7 +41,6 @@ class FeatureExtractor:
             "crepe-tiny": partial(self.get_f0_official_crepe_computation, model='model'),
             "mangio-crepe": self.get_f0_crepe_computation,
             "mangio-crepe-tiny": partial(self.get_f0_crepe_computation, model='model'),
-            
         }
         
     def __del__(self):

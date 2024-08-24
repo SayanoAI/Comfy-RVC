@@ -1,6 +1,5 @@
 import sys, os, multiprocessing
 from threading import Thread
-from scipy import signal
 import numpy as np, os, traceback
 from .lib.model_utils import load_hubert
 from .lib.slicer2 import Slicer
@@ -14,7 +13,7 @@ from .config import config
 import torch
 
 class Preprocess:
-    def __init__(self, sr, exp_dir, noparallel=True, period=3.0, overlap=.3, max_volume=.95):
+    def __init__(self, sr, exp_dir, noparallel=True, period=3.0, overlap=.3, alpha=.75, max_volume=.95):
         self.slicer = Slicer(
             sr=sr,
             threshold=-42,
@@ -24,12 +23,11 @@ class Preprocess:
             max_sil_kept=500
         )
         self.sr = sr
-        self.bh, self.ah = signal.butter(N=5, Wn=48, btype="high", fs=self.sr)
         self.per = period
         self.overlap = overlap
         self.tail = self.per + self.overlap
         self.max = max_volume
-        self.alpha = 0.75
+        self.alpha = alpha
         self.exp_dir = exp_dir
         self.gt_wavs_dir = "%s/0_gt_wavs" % exp_dir
         self.wavs16k_dir = "%s/1_16k_wavs" % exp_dir
@@ -70,10 +68,7 @@ class Preprocess:
 
     def pipeline(self, path, idx0):
         try:
-            audio = load_audio(path, self.sr)
-            # zero phased digital filter cause pre-ringing noise...
-            # audio = signal.filtfilt(self.bh, self.ah, audio)
-            # audio = signal.lfilter(self.bh, self.ah, audio)
+            audio,_ = load_input_audio(path, self.sr)
 
             idx1 = 0
             for audio in self.slicer.slice(audio):
@@ -121,7 +116,7 @@ class Preprocess:
             self.println("Fail. %s" % traceback.format_exc())
 
 class FeatureInput(FeatureExtractor):
-    def __init__(self, f0_method, exp_dir, samplerate=16000, hop_size=160, device="cpu", version="v2", if_f0=False):
+    def __init__(self, model, f0_method, exp_dir, samplerate=16000, hop_size=160, device="cpu", version="v2", if_f0=False):
         self.sr = samplerate
         self.hop = hop_size
         self.f0_method = f0_method
@@ -136,7 +131,7 @@ class FeatureInput(FeatureExtractor):
         self.f0_mel_min = 1127 * np.log(1 + self.f0_min / 700)
         self.f0_mel_max = 1127 * np.log(1 + self.f0_max / 700)
 
-        self.model = load_hubert(config)
+        self.model = model
         
         super().__init__(samplerate, config, onnx=False)
 
@@ -161,11 +156,8 @@ class FeatureInput(FeatureExtractor):
             "padding_mask": padding_mask.to(self.device),
             "output_layer": 9 if self.version == "v1" else 12,  # layer 9
         }
-        with torch.no_grad():
-            logits = self.model.extract_features(**inputs)
-            feats = (
-                self.model.final_proj(logits[0]) if self.version == "v1" else logits[0]
-            )
+        
+        feats = self.model.extract_features(version=self.version,**inputs)
 
         feats = feats.squeeze(0).float().cpu().numpy()
         if np.isnan(feats).sum() == 0:
@@ -216,9 +208,9 @@ class FeatureInput(FeatureExtractor):
                 except:
                     self.printt("f0fail-%s-%s-%s" % (idx, inp_path, traceback.format_exc()))
 
-def preprocess_trainset(inp_root, sr, n_p, exp_dir, period=3.0, overlap=.3):
+def preprocess_trainset(inp_root, sr, n_p, exp_dir, period=3.0, overlap=.3, max_volume=1., alpha=.75):
     try:
-        pp = Preprocess(sr, exp_dir, period=period, overlap=overlap)
+        pp = Preprocess(sr, exp_dir, period=period, overlap=overlap, max_volume=max_volume, alpha=alpha)
         pp.println("start preprocess")
         pp.println(sys.argv)
         pp.pipeline_mp_inp_dir(inp_root, n_p)
@@ -229,9 +221,9 @@ def preprocess_trainset(inp_root, sr, n_p, exp_dir, period=3.0, overlap=.3):
     except Exception as e:
         return f"Failed to preprocess data: {e}"
 
-def extract_features_trainset(exp_dir,n_p,f0method,device,version,if_f0):
+def extract_features_trainset(hubert_model,exp_dir,n_p,f0method,device,version,if_f0):
     try:
-        featureInput = FeatureInput(f0_method=f0method,exp_dir=exp_dir,device=device,version=version,if_f0=if_f0)
+        featureInput = FeatureInput(f0_method=f0method,exp_dir=exp_dir,device=device,version=version,if_f0=if_f0,model=hubert_model)
         paths = []
         inp_root = os.path.join(exp_dir,"1_16k_wavs")
         opt_root1 = os.path.join(exp_dir,"2a_f0")

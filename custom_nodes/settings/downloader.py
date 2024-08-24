@@ -1,11 +1,12 @@
 import platform
 import re
+import shutil
 import subprocess
 from typing import IO, List, Tuple
 import unicodedata
 import requests
 import os
-import zipfile
+from zipfile import ZipFile
 
 from ...lib import BASE_CACHE_DIR, BASE_MODELS_DIR
 
@@ -31,7 +32,8 @@ RVC_MODELS = [
 RVC_INDEX = [
     "RVC/.index/added_IVF1063_Flat_nprobe_1_Sayano_v2.index",
     "RVC/.index/added_IVF985_Flat_nprobe_1_Fuji_v2.index",
-    "RVC/.index/Monika_v2_40k.index"
+    "RVC/.index/Monika_v2_40k.index",
+    "RVC/.index/Sayano_v2_40k.index"
 ]
 BASE_MODELS = ["content-vec-best.safetensors", "rmvpe.pt"]
 VITS_MODELS = ["VITS/pretrained_ljs.pth"]
@@ -99,6 +101,28 @@ def save_file_generator(save_dir: str, data: List[IO]):
         data_path = os.path.join(save_dir,datum.name)
         yield (data_path, datum.read())
 
+def extract_zip_without_structure(zip_path, extract_to, cleanup=False):
+    os.makedirs(extract_to,exist_ok=True)
+    try:
+        with ZipFile(zip_path, 'r') as zip_ref:
+            zipped_files = zip_ref.namelist()
+            extracted_files = os.listdir(extract_to)
+            if len(zipped_files)>len(extracted_files):
+                for member in zipped_files:
+                    # Get the file name only (discard the directory structure)
+                    filename = os.path.basename(member)
+                    if filename:  # Check if it's not an empty string
+                        # Create the full path for the extracted file
+                        file_path = os.path.join(extract_to, filename)
+                        # Extract the file
+                        with zip_ref.open(member) as source, open(file_path, 'wb') as target:
+                            shutil.copyfileobj(source, target)
+        if cleanup: os.remove(zip_path) # cleanup
+        print(f"Successfully extracted files to: {extract_to}")
+    except Exception as error:
+        print(f"Failed to extract files: {error}")
+    finally: return os.listdir(extract_to)
+                    
 def save_zipped_files(params: Tuple[str, any]):
     (data_path, datum) = params
 
@@ -113,14 +137,13 @@ def save_zipped_files(params: Tuple[str, any]):
             f.write(datum)
 
         print(f"extracting zip file: {zip_path}")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(os.path.dirname(data_path))
-        print(f"finished extracting zip file")
+        files = extract_zip_without_structure(zip_path,os.path.dirname(data_path),cleanup=True)
+        print(f"finished extracting {len(files)} files")
         
-        os.remove(zip_path) # cleanup
-        return f"Successfully saved files to: {data_path}"
+        return True
     except Exception as e:
-        return f"Failed to save files: {e}"
+        print(f"Failed to save files: {e}")
+        return False
     
 def slugify_filepath(filepath):
     # Split the path into directory and filename

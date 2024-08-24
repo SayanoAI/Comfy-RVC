@@ -65,7 +65,7 @@ class UVR5Node:
             if download_file(params): print(f"successfully downloaded: {model_path}")
         
         input_audio = get_audio(audio)
-        hash_name = get_hash(model, agg, format, *input_audio)
+        hash_name = get_hash(model, agg, format, audio_to_bytes(*input_audio))
         audio_path = os.path.join(temp_path,"uvr",f"{hash_name}.wav")
         primary_path = os.path.join(cache_dir,hash_name,f"primary.{format}")
         secondary_path = os.path.join(cache_dir,hash_name,f"secondary.{format}")

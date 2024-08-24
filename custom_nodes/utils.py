@@ -6,7 +6,7 @@ from ..lib import BASE_MODELS_DIR
 
 temp_path = folder_paths.get_temp_directory()
 
-def model_downloader(model):
+def model_downloader(model: str) -> str:
     filename = os.path.basename(model)
     subfolder = os.path.dirname(model)
     model_path = os.path.join(BASE_MODELS_DIR,subfolder,filename)
@@ -18,7 +18,7 @@ def model_downloader(model):
 
 def increment_filename_no_overwrite(proposed_path):
     output_dir, filename_ext = os.path.split(proposed_path)
-    filename, file_format = os.splitext(filename_ext)
+    filename, file_format = os.path.splitext(filename_ext)
     files = os.listdir(output_dir)
     files = filter(lambda f: os.path.isfile(os.path.join(output_dir, f)), files)
     files = filter(lambda f: f.startswith(filename), files)
@@ -26,7 +26,7 @@ def increment_filename_no_overwrite(proposed_path):
     file_numbers = [re.search(r'_(\d+)\.', f) for f in files]
     file_numbers = [int(f.group(1)) for f in file_numbers if f]
     this_file_number = max(file_numbers) + 1 if file_numbers else 1
-    output_path = os.path.join(output_dir, filename + f'_{this_file_number}.' + file_format)
+    output_path = os.path.join(output_dir, f'{filename}_{this_file_number}.{file_format}')
     return output_path
 
 class MultipleTypeProxy(str):

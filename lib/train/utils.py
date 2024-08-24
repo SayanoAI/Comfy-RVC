@@ -278,22 +278,7 @@ def load_filepaths_and_text(filename, split="|"):
 
 
 def get_hparams(init=True):
-    """
-    todo:
-      结尾七人组：
-        保存频率、总epoch                     done
-        bs                                    done
-        pretrainG、pretrainD                  done
-        卡号：os.en["CUDA_VISIBLE_DEVICES"]   done
-        if_latest                             done
-      模型：if_f0                             done
-      采样率：自动选择config                  done
-      是否缓存数据集进GPU:if_cache_data_in_gpu done
 
-      -m:
-        自动决定training_files路径,改掉train_nsf_load_pretrain.py里的hps.data.training_files    done
-      -c不要了
-    """
     parser = argparse.ArgumentParser()
     # parser.add_argument('-c', '--config', type=str, default="configs/40k.json",help='JSON file for configuration')
     parser.add_argument(

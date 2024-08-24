@@ -7,9 +7,6 @@ from .lib import BASE_MODELS_DIR
 from .lib.train import utils
 import datetime
 
-hps = utils.get_hparams()
-os.environ["CUDA_VISIBLE_DEVICES"] = hps.gpus.replace("-", ",")
-os.environ["NCCL_P2P_DISABLE"] = 1
 from random import shuffle, randint
 
 import torch
@@ -34,25 +31,13 @@ from .lib.train.data_utils import (
     DistributedBucketSampler,
 )
 
-if hps.version == "v1":
-    from .lib.infer_pack.models import (
-        SynthesizerTrnMs256NSFsid as RVC_Model_f0,
-        SynthesizerTrnMs256NSFsid_nono as RVC_Model_nof0,
-        MultiPeriodDiscriminator,
-    )
-else:
-    from .lib.infer_pack.models import (
-        SynthesizerTrnMs768NSFsid as RVC_Model_f0,
-        SynthesizerTrnMs768NSFsid_nono as RVC_Model_nof0,
-        MultiPeriodDiscriminatorV2 as MultiPeriodDiscriminator,
-    )
 from .lib.train.losses import generator_loss, discriminator_loss, feature_loss, kl_loss
 from .lib.train.mel_processing import mel_spectrogram_torch, spec_to_mel_torch
 
 global_step = 0
 least_loss = 40
 
-def save_checkpoint(ckpt, sr, if_f0, name, epoch, version, hps, model_path=os.path.join(BASE_MODELS_DIR,"RVC")):
+def save_checkpoint(ckpt, name, epoch, hps, model_path=None):
     try:
         opt = OrderedDict()
         opt["weight"] = {}
@@ -81,10 +66,11 @@ def save_checkpoint(ckpt, sr, if_f0, name, epoch, version, hps, model_path=os.pa
             hps.data.sampling_rate,
         ]
         opt["info"] = "%sepoch" % epoch
-        opt["sr"] = sr
-        opt["f0"] = if_f0
-        opt["version"] = version
-        torch.save(opt, os.path.join(model_path,name+".pth"))
+        opt["sr"] = hps.sample_rate
+        opt["f0"] = hps.if_f0
+        opt["version"] = hps.version
+        if model_path is None: model_path=os.path.join(hps.model_dir,name+".pth")
+        torch.save(opt, model_path)
         return "Success."
     except:
         return traceback.format_exc()
@@ -101,8 +87,13 @@ class EpochRecorder:
         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return f"[{current_time}] | ({elapsed_time_str})"
 
+def train_model(hps: "utils.HParams"):
+    os.environ["CUDA_VISIBLE_DEVICES"] = hps.gpus.replace("-", ",")
+    os.environ["NCCL_P2P_DISABLE"] = "1"
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = str(randint(20000, 55555))
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128,garbage_collection_threshold:0.8"
 
-def main():
     n_gpus = len(hps.gpus.split("-")) if hps.gpus else torch.cuda.device_count()
 
     if not torch.cuda.is_available() and torch.backends.mps.is_available():
@@ -111,12 +102,12 @@ def main():
         # patch to unblock people without gpus. there is probably a better way.
         print("NO GPU DETECTED: falling back to CPU - this may take a while")
         n_gpus = 1
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = str(randint(20000, 55555))
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128,garbage_collection_threshold:0.8"
-    children = {}
+    
     gpu_devices = hps.gpus.split("-") if hps.gpus else range(n_gpus)
+
+    children = {}
     for i, device in enumerate(gpu_devices):
+        mp.Pool
         subproc = mp.Process(
             target=run,
             args=(
@@ -129,11 +120,23 @@ def main():
         children[i]=subproc
         subproc.start()
 
-    for i in gpu_devices:
+    for i in children:
         children[i].join()
 
 
 def run(rank, n_gpus, hps, device):
+    if hps.version == "v1":
+        from .lib.infer_pack.models import (
+            SynthesizerTrnMs256NSFsid as RVC_Model_f0,
+            SynthesizerTrnMs256NSFsid_nono as RVC_Model_nof0,
+            MultiPeriodDiscriminator,
+        )
+    else:
+        from .lib.infer_pack.models import (
+            SynthesizerTrnMs768NSFsid as RVC_Model_f0,
+            SynthesizerTrnMs768NSFsid_nono as RVC_Model_nof0,
+            MultiPeriodDiscriminatorV2 as MultiPeriodDiscriminator,
+        )
     global global_step, least_loss
     if rank == 0:
         logger = utils.get_logger(hps.model_dir)
@@ -538,13 +541,9 @@ def train_and_evaluate(
                             loss_gen_all,
                             save_checkpoint(
                                 ckpt,
-                                hps.sample_rate,
-                                hps.if_f0,
                                 f"loss{loss_gen_all:2.0f}_{hps.name}_e{epoch}",
                                 epoch,
-                                hps.version,
-                                hps,
-                                model_path=hps.model_dir
+                                hps                                
                             ),
                         )
                     )
@@ -639,13 +638,9 @@ def train_and_evaluate(
                     epoch,
                     save_checkpoint(
                         ckpt,
-                        hps.sample_rate,
-                        hps.if_f0,
                         hps.name + "_e%s_s%s" % (epoch, global_step),
                         epoch,
-                        hps.version,
-                        hps,
-                        model_path=hps.model_dir
+                        hps
                     ),
                 )
             )
@@ -663,7 +658,11 @@ def train_and_evaluate(
             "saving final ckpt:%s"
             % (
                 save_checkpoint(
-                    ckpt, hps.sample_rate, hps.if_f0, hps.name, epoch, hps.version, hps
+                    ckpt,
+                    hps.name,
+                    epoch,
+                    hps,
+                    model_path=hps.model_path
                 )
             )
         )
@@ -673,4 +672,5 @@ def train_and_evaluate(
 
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method("spawn")
-    main()
+    hps = utils.get_hparams()
+    train_model(hps)
