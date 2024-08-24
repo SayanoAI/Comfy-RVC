@@ -3,90 +3,16 @@
   "last_link_id": 25,
   "nodes": [
     {
-      "id": 6,
-      "type": "LoadPitchExtractionParams",
-      "pos": [
-        252,
-        -72
-      ],
-      "size": {
-        "0": 315,
-        "1": 178
-      },
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "pitch_extraction_params",
-          "type": "PITCH_EXTRACTION",
-          "links": [
-            5
-          ],
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadPitchExtractionParams"
-      },
-      "widgets_values": [
-        "rmvpe",
-        false,
-        0.75,
-        0,
-        0.25,
-        0.25
-      ]
-    },
-    {
-      "id": 4,
-      "type": "LoadRVCModelNode",
-      "pos": [
-        631,
-        -114
-      ],
-      "size": {
-        "0": 315,
-        "1": 102
-      },
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "model",
-          "type": "RVC_MODEL",
-          "links": [
-            3
-          ],
-          "shape": 3
-        },
-        {
-          "name": "model_name",
-          "type": "STRING",
-          "links": null,
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadRVCModelNode"
-      },
-      "widgets_values": [
-        "RVC/Sayano.pth",
-        "None"
-      ]
-    },
-    {
       "id": 1,
       "type": "RVCNode",
       "pos": [
         621,
         122
       ],
-      "size": {
-        "0": 313.7279357910156,
-        "1": 166
-      },
+      "size": [
+        313.7279357910156,
+        166
+      ],
       "flags": {},
       "order": 6,
       "mode": 0,
@@ -123,8 +49,8 @@
           "links": [
             15
           ],
-          "shape": 3,
-          "slot_index": 0
+          "slot_index": 0,
+          "shape": 3
         }
       ],
       "properties": {
@@ -133,7 +59,50 @@
       "widgets_values": [
         0,
         "flac",
-        true
+        true,
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "LoadRVCModelNode",
+      "pos": [
+        633,
+        -128
+      ],
+      "size": {
+        "0": 315,
+        "1": 102
+      },
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "model",
+          "type": "RVC_MODEL",
+          "links": [
+            3
+          ],
+          "shape": 3
+        },
+        {
+          "name": "model_name",
+          "type": "STRING",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadRVCModelNode"
+      },
+      "widgets_values": [
+        "RVC/Sayano.pth",
+        "RVC/.index/Sayano_v2_40k.index"
       ]
     },
     {
@@ -141,14 +110,14 @@
       "type": "LoadHubertModel",
       "pos": [
         627,
-        12
+        27
       ],
       "size": {
         "0": 315,
         "1": 58
       },
       "flags": {},
-      "order": 2,
+      "order": 1,
       "mode": 0,
       "outputs": [
         {
@@ -168,16 +137,52 @@
       ]
     },
     {
+      "id": 6,
+      "type": "LoadPitchExtractionParams",
+      "pos": [
+        252,
+        -72
+      ],
+      "size": {
+        "0": 315,
+        "1": 178
+      },
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "pitch_extraction_params",
+          "type": "PITCH_EXTRACTION",
+          "links": [
+            5
+          ],
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadPitchExtractionParams"
+      },
+      "widgets_values": [
+        "rmvpe",
+        false,
+        0.75,
+        0,
+        0.25,
+        0.25
+      ]
+    },
+    {
       "id": 8,
       "type": "MergeAudioNode",
       "pos": [
         981,
         128
       ],
-      "size": {
-        "0": 315,
-        "1": 166
-      },
+      "size": [
+        315,
+        166
+      ],
       "flags": {},
       "order": 7,
       "mode": 0,
@@ -210,8 +215,14 @@
           "links": [
             23
           ],
-          "shape": 3,
-          "slot_index": 0
+          "slot_index": 0,
+          "shape": 3
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": null,
+          "shape": 3
         }
       ],
       "properties": {
@@ -220,61 +231,12 @@
       "widgets_values": [
         "None",
         "mean",
-        true
-      ]
-    },
-    {
-      "id": 19,
-      "type": "RVC-Studio.PreviewAudio",
-      "pos": [
-        1413,
-        112
-      ],
-      "size": [
-        315,
-        174
-      ],
-      "flags": {},
-      "order": 8,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "audio",
-          "type": "VHS_AUDIO",
-          "link": 23
-        },
-        {
-          "name": "filename",
-          "type": "STRING",
-          "link": 25,
-          "widget": {
-            "name": "filename"
-          }
-        }
-      ],
-      "outputs": [
-        {
-          "name": "output_path",
-          "type": "STRING",
-          "links": null,
-          "shape": 3
-        },
-        {
-          "name": "vhs_audio",
-          "type": "VHS_AUDIO",
-          "links": null,
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "RVC-Studio.PreviewAudio"
-      },
-      "widgets_values": [
-        "test",
-        "flac",
-        1,
         true,
-        true
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
       ]
     },
     {
@@ -306,8 +268,8 @@
           "links": [
             14
           ],
-          "shape": 3,
-          "slot_index": 0
+          "slot_index": 0,
+          "shape": 3
         },
         {
           "name": "secondary_stem",
@@ -315,8 +277,8 @@
           "links": [
             13
           ],
-          "shape": 3,
-          "slot_index": 1
+          "slot_index": 1,
+          "shape": 3
         }
       ],
       "properties": {
@@ -353,6 +315,71 @@
       "bgcolor": "#653"
     },
     {
+      "id": 19,
+      "type": "RVC-Studio.PreviewAudio",
+      "pos": [
+        1340,
+        125
+      ],
+      "size": [
+        315,
+        170
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "VHS_AUDIO",
+          "link": 23
+        },
+        {
+          "name": "filename",
+          "type": "STRING",
+          "link": 25,
+          "widget": {
+            "name": "filename"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output_path",
+          "type": "STRING",
+          "links": null,
+          "shape": 3
+        },
+        {
+          "name": "vhs_audio",
+          "type": "VHS_AUDIO",
+          "links": null,
+          "shape": 3
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RVC-Studio.PreviewAudio"
+      },
+      "widgets_values": [
+        "test",
+        "flac",
+        2,
+        true,
+        true,
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      ]
+    },
+    {
       "id": 20,
       "type": "RVC-Studio.LoadAudio",
       "pos": [
@@ -361,7 +388,7 @@
       ],
       "size": {
         "0": 210,
-        "1": 126
+        "1": 146
       },
       "flags": {},
       "order": 4,
@@ -373,8 +400,8 @@
           "links": [
             25
           ],
-          "shape": 3,
-          "slot_index": 0
+          "slot_index": 0,
+          "shape": 3
         },
         {
           "name": "vhs_audio",
@@ -383,13 +410,19 @@
             24
           ],
           "shape": 3
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": null,
+          "shape": 3
         }
       ],
       "properties": {
         "Node name for S&R": "RVC-Studio.LoadAudio"
       },
       "widgets_values": [
-        "FRIENDS.mp3",
+        "idol-tv.flac",
         "None",
         "image"
       ]
@@ -473,10 +506,10 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.683013455365071,
+      "scale": 0.7513148009015777,
       "offset": [
-        423.91524190043117,
-        577.965666728948
+        -875.4596002397666,
+        188.08314484174144
       ]
     }
   },
