@@ -1,7 +1,7 @@
 librosa~=0.10.2
 numpy
 fairseq==0.12.2
-faiss-cpu
+faiss-cpu==1.7.4
 ffmpeg-python
 tqdm
 audioread
@@ -22,3 +22,4 @@ opencv-python
 soundfile
 openmim
 diffusers
+scikit-learn
