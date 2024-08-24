@@ -1,8 +1,3 @@
-from functools import lru_cache
-import os
-
-from ...lib import BASE_CACHE_DIR, PersistedDict
-
 MENU_ITEMS = {
     "Get help": "https://github.com/SayanoAI/RVC-Studio/discussions",
     "Report a Bug": "https://github.com/SayanoAI/RVC-Studio/issues",
@@ -12,19 +7,9 @@ MENU_ITEMS = {
 }
 
 DEVICE_OPTIONS = ["cpu","cuda"]
-PITCH_EXTRACTION_OPTIONS = ["rmvpe","rmvpe+"]
+PITCH_EXTRACTION_OPTIONS = ["crepe","mangio-crepe","rmvpe","rmvpe+"]
 MERGE_OPTIONS=["median","mean","min","max"]
 TTS_MODELS = ["edge","speecht5"]
 N_THREADS_OPTIONS=[1,2,4,8,12,16]
 SR_MAP = {"32k": 32000,"40k": 40000, "48k": 48000}
 SUPPORTED_LANGUAGES = ['en', 'fr', 'es', "ja", "zh"]
-# @lru_cache
-# def get_servers():
-#     os.makedirs(BASE_CACHE_DIR,exist_ok=True)
-#     fname = os.path.join(BASE_CACHE_DIR,"servers.shelve")
-#     servers = PersistedDict(fname)
-#     return servers
-
-# SERVERS = get_servers()
-# RVC_INFERENCE_URL = SERVERS.RVC_INFERENCE_URL
-# UVR_INFERENCE_URL = SERVERS.UVR_INFERENCE_URL
