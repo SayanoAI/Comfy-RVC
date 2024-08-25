@@ -1,8 +1,8 @@
 from collections import OrderedDict
+import json
 import os
+import shutil
 import traceback
-
-from .lib import BASE_MODELS_DIR
 
 from .lib.train import utils
 import datetime
@@ -33,9 +33,6 @@ from .lib.train.data_utils import (
 
 from .lib.train.losses import generator_loss, discriminator_loss, feature_loss, kl_loss
 from .lib.train.mel_processing import mel_spectrogram_torch, spec_to_mel_torch
-
-global_step = 0
-least_loss = 40
 
 def save_checkpoint(ckpt, name, epoch, hps, model_path=None):
     try:
@@ -91,7 +88,7 @@ def train_model(hps: "utils.HParams"):
     os.environ["CUDA_VISIBLE_DEVICES"] = hps.gpus.replace("-", ",")
     os.environ["NCCL_P2P_DISABLE"] = "1"
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = str(randint(20000, 55555))
+    os.environ["MASTER_PORT"] = str(randint(8189, 8200))
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128,garbage_collection_threshold:0.8"
 
     n_gpus = len(hps.gpus.split("-")) if hps.gpus else torch.cuda.device_count()
@@ -104,10 +101,10 @@ def train_model(hps: "utils.HParams"):
         n_gpus = 1
     
     gpu_devices = hps.gpus.split("-") if hps.gpus else range(n_gpus)
+    
 
     children = {}
     for i, device in enumerate(gpu_devices):
-        mp.Pool
         subproc = mp.Process(
             target=run,
             args=(
@@ -123,8 +120,18 @@ def train_model(hps: "utils.HParams"):
     for i in children:
         children[i].join()
 
-
 def run(rank, n_gpus, hps, device):
+    print(f"{__name__=}")
+    global global_step, least_loss, loss_file
+    global_step = 0
+    loss_file = os.path.join(hps.model_dir,"losses.json")
+
+    if os.path.isfile(loss_file):
+        with open(loss_file,"r") as f:
+            data: dict = json.load(f)
+            least_loss = data.get("least_loss",40)
+    else: least_loss = 40
+
     if hps.version == "v1":
         from .lib.infer_pack.models import (
             SynthesizerTrnMs256NSFsid as RVC_Model_f0,
@@ -137,28 +144,25 @@ def run(rank, n_gpus, hps, device):
             SynthesizerTrnMs768NSFsid_nono as RVC_Model_nof0,
             MultiPeriodDiscriminatorV2 as MultiPeriodDiscriminator,
         )
-    global global_step, least_loss
+
     if rank == 0:
         logger = utils.get_logger(hps.model_dir)
         logger.info(hps)
         # utils.check_git_hash(hps.model_dir)
         writer = SummaryWriter(log_dir=hps.model_dir)
         writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
-    print(f"line 145: {rank, n_gpus, device}")
     dist.init_process_group(
         backend="gloo", init_method="env://", world_size=n_gpus, rank=rank
     )
-    print(f"line 149: started dist.init_process_group")
     torch.manual_seed(hps.train.seed)
     if torch.cuda.is_available():
         torch.cuda.set_device(f"cuda:{device}")
-    print(f"line 153: cuda seed and device set")
 
     if hps.if_f0 == 1:
         train_dataset = TextAudioLoaderMultiNSFsid(hps.data.training_files, hps.data)
     else:
         train_dataset = TextAudioLoader(hps.data.training_files, hps.data)
-    print(f"line 157: {train_dataset}")
+    
     train_sampler = DistributedBucketSampler(
         train_dataset,
         hps.train.batch_size * n_gpus,
@@ -168,7 +172,7 @@ def run(rank, n_gpus, hps, device):
         rank=rank,
         shuffle=True,
     )
-    print(f"line 167: {train_sampler}")
+    
     # It is possible that dataloader's workers are out of shared memory. Please try to raise your shared memory limit.
     # num_workers=8 -> num_workers=4
     if hps.if_f0 == 1:
@@ -185,7 +189,7 @@ def run(rank, n_gpus, hps, device):
         persistent_workers=True,
         prefetch_factor=8,
     )
-    print(f"line 184: {train_loader}")
+    
     if hps.if_f0 == 1:
         net_g = RVC_Model_f0(
             hps.data.filter_length // 2 + 1,
@@ -218,8 +222,7 @@ def run(rank, n_gpus, hps, device):
         betas=hps.train.betas,
         eps=hps.train.eps,
     )
-    # net_g = DDP(net_g, device_ids=[rank], find_unused_parameters=True)
-    # net_d = DDP(net_d, device_ids=[rank], find_unused_parameters=True)
+
     if torch.cuda.is_available():
         net_g = DDP(net_g, device_ids=[rank])
         net_d = DDP(net_d, device_ids=[rank])
@@ -227,19 +230,14 @@ def run(rank, n_gpus, hps, device):
         net_g = DDP(net_g)
         net_d = DDP(net_d)
 
-    try:  # 如果能加载自动resume
-        _, _, _, epoch_str = utils.load_checkpoint(
-            utils.latest_checkpoint_path(hps.model_dir, "D_*.pth"), net_d, optim_d
-        )  # D多半加载没事
-        if rank == 0:
-            logger.info("loaded D")
-        # _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "G_*.pth"), net_g, optim_g,load_opt=0)
-        _, _, _, epoch_str = utils.load_checkpoint(
-            utils.latest_checkpoint_path(hps.model_dir, "G_*.pth"), net_g, optim_g
-        )
+    try:  # resume training
+        _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "D_*.pth"), net_d, optim_d)
+        if rank == 0: logger.info("loaded D")
+        
+        _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "G_*.pth"), net_g, optim_g)
+        if rank == 0: logger.info("loaded G")
+
         global_step = (epoch_str - 1) * len(train_loader)
-        # epoch_str = 1
-        # global_step = 0
     except:  # 如果首次不能加载，加载pretrain
         # traceback.print_exc()
         epoch_str = 1
@@ -314,7 +312,7 @@ def train_and_evaluate(
         writer, writer_eval = writers
 
     train_loader.batch_sampler.set_epoch(epoch)
-    global global_step, least_loss
+    global global_step, least_loss, loss_file
 
     net_g.train()
     net_d.train()
@@ -511,9 +509,7 @@ def train_and_evaluate(
             if global_step % hps.train.log_interval == 0:
                 lr = optim_g.param_groups[0]["lr"]
                 logger.info(
-                    "Train Epoch: {} [{:.0f}%]".format(
-                        epoch, 100.0 * batch_idx / len(train_loader)
-                    )
+                    "Train Epoch: {} [{:.0f}%]".format(epoch, 100.0 * batch_idx / len(train_loader))
                 )
                 # Amor For Tensorboard display
                 if loss_mel > 75:
@@ -526,30 +522,21 @@ def train_and_evaluate(
                 logger.info(
                     f"loss_disc={loss_disc:.3f}, loss_gen={loss_gen:.3f}, loss_fm={loss_fm:.3f},loss_mel={loss_mel:.3f}, loss_kl={loss_kl:.3f}"
                 )
-                if loss_gen_all<int(least_loss):
+                if loss_gen_all<least_loss:
                     least_loss = loss_gen_all
                     
                     if hasattr(net_g, "module"):
                         ckpt = net_g.module.state_dict()
                     else:
                         ckpt = net_g.state_dict()
-                    logger.info(
-                        "=== saving best model: epoch %s_e%s_%2.2f: %s ==="
-                        % (
-                            hps.name,
-                            epoch,
-                            loss_gen_all,
-                            save_checkpoint(
-                                ckpt,
-                                f"loss{loss_gen_all:2.0f}_{hps.name}_e{epoch}",
-                                epoch,
-                                hps                                
-                            ),
-                        )
-                    )
-                    logger.info(
-                        f"[lowest loss] loss_disc={loss_disc:.3f}, loss_gen={loss_gen:.3f}, loss_fm={loss_fm:.3f},loss_mel={loss_mel:.3f}, loss_kl={loss_kl:.3f}"
-                    )
+                    
+                    if hps.save_best_model:
+                        best_model_name = f"{hps.name}_e{epoch}_loss{loss_gen_all:2.2f}"
+                        status = save_checkpoint(ckpt,best_model_name,epoch,hps)
+                        with open(loss_file,"w") as f:
+                            json.dump(dict(least_loss=least_loss.item(),best_model=os.path.join(hps.model_dir,best_model_name+".pth")),f)
+                        logger.info(f"=== saving best model: epoch {hps.name}_e{epoch}_{loss_gen_all:2.2f}: {status=} ===")
+                    logger.info(f"[lowest loss] loss_disc={loss_disc:.3f}, loss_gen={loss_gen:.3f}, loss_fm={loss_fm:.3f},loss_mel={loss_mel:.3f}, loss_kl={loss_kl:.3f}")
                     
                 scalar_dict = {
                     "loss/g/total": loss_gen_all,
@@ -596,20 +583,21 @@ def train_and_evaluate(
     # /Run steps
 
     if hps.save_every_epoch>0 and (epoch % hps.save_every_epoch == 0) and rank == 0:
-        if hps.if_latest == 0:
+            
+        if hps.if_latest:
             utils.save_checkpoint(
                 net_g,
                 optim_g,
                 hps.train.learning_rate,
                 epoch,
-                os.path.join(hps.model_dir, "G_{}.pth".format(global_step)),
+                os.path.join(hps.model_dir, f"G_{hps.total_epoch}00000.pth"),
             )
             utils.save_checkpoint(
                 net_d,
                 optim_d,
                 hps.train.learning_rate,
                 epoch,
-                os.path.join(hps.model_dir, "D_{}.pth".format(global_step)),
+                os.path.join(hps.model_dir, f"D_{hps.total_epoch}00000.pth"),
             )
         else:
             utils.save_checkpoint(
@@ -617,33 +605,22 @@ def train_and_evaluate(
                 optim_g,
                 hps.train.learning_rate,
                 epoch,
-                os.path.join(hps.model_dir, "G_{}.pth".format(2333333)),
+                os.path.join(hps.model_dir, f"G_{global_step}.pth"),
             )
             utils.save_checkpoint(
                 net_d,
                 optim_d,
                 hps.train.learning_rate,
                 epoch,
-                os.path.join(hps.model_dir, "D_{}.pth".format(2333333)),
+                os.path.join(hps.model_dir, f"D_{global_step}.pth"),
             )
-        if rank == 0 and hps.save_every_weights == "1":
+        if rank == 0 and hps.save_every_weights:
             if hasattr(net_g, "module"):
                 ckpt = net_g.module.state_dict()
             else:
                 ckpt = net_g.state_dict()
-            logger.info(
-                "saving ckpt %s_e%s:%s"
-                % (
-                    hps.name,
-                    epoch,
-                    save_checkpoint(
-                        ckpt,
-                        hps.name + "_e%s_s%s" % (epoch, global_step),
-                        epoch,
-                        hps
-                    ),
-                )
-            )
+            status = save_checkpoint(ckpt,f"{hps.name}_e{epoch}_s{global_step}",epoch,hps)
+            logger.info(f"saving ckpt {hps.name}_e{epoch}: {status}")
 
     if rank == 0:
         logger.info("====> Epoch: {} {}".format(epoch, epoch_recorder.record()))
@@ -654,21 +631,17 @@ def train_and_evaluate(
             ckpt = net_g.module.state_dict()
         else:
             ckpt = net_g.state_dict()
-        logger.info(
-            "saving final ckpt:%s"
-            % (
-                save_checkpoint(
-                    ckpt,
-                    hps.name,
-                    epoch,
-                    hps,
-                    model_path=hps.model_path
-                )
-            )
-        )
-        sleep(1)
-        os._exit(2333333)
+        if hps.save_best_model:
+            with open(loss_file,"r") as f:
+                data = json.load(f)
+                best_model = data["best_model"]
+                if os.path.isfile(best_model):
+                    shutil.copy(best_model,os.path.join(os.path.dirname(hps.model_path),f"{hps.name}-best.pth"))
 
+        status = save_checkpoint(ckpt,hps.name,epoch,hps,model_path=hps.model_path)
+        logger.info(f"saving final ckpt: {status}")
+        sleep(1)
+        os._exit(0)
 
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method("spawn")

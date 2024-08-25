@@ -381,6 +381,7 @@ def get_hparams(init=True):
     hparams.save_every_weights = args.save_every_weights
     hparams.if_cache_data_in_gpu = args.if_cache_data_in_gpu
     hparams.data.training_files = os.path.join(experiment_dir,"filelist.txt")
+    hparams.save_best_model = True
     return hparams
 
 
@@ -447,7 +448,7 @@ def get_logger(model_dir, filename="train.log"):
 class HParams:
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
-            if type(v) == dict:
+            if isinstance(v, dict):
                 v = HParams(**v)
             self[k] = v
 
