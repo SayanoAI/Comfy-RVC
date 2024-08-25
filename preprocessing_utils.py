@@ -221,9 +221,9 @@ def preprocess_trainset(inp_root, sr, n_p, exp_dir, period=3.0, overlap=.3, max_
     except Exception as e:
         return f"Failed to preprocess data: {e}"
 
-def extract_features_trainset(hubert_model,exp_dir,n_p,f0method,device,version,if_f0):
+def extract_features_trainset(hubert_model,exp_dir,n_p,f0method,device,version,if_f0,crepe_hop_length):
     try:
-        featureInput = FeatureInput(f0_method=f0method,exp_dir=exp_dir,device=device,version=version,if_f0=if_f0,model=hubert_model)
+        featureInput = FeatureInput(f0_method=f0method,exp_dir=exp_dir,device=device,version=version,if_f0=if_f0,model=hubert_model,hop_size=crepe_hop_length)
         paths = []
         inp_root = os.path.join(exp_dir,"1_16k_wavs")
         opt_root1 = os.path.join(exp_dir,"2a_f0")

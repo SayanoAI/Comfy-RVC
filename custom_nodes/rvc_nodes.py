@@ -66,7 +66,8 @@ class LoadPitchExtractionParams:
                     "min": 0., #Minimum value
                     "max": .5, #Maximum value
                     "step": .01, #Slider's step
-                })
+                }),
+                "crepe_hop_length": ("INT",{"default": 160, "min": 16, "max": 512, "step": 16})
             },
         }
 
@@ -252,8 +253,13 @@ class RVCProcessDatasetNode:
         assert model_name, "Please provide a model name!"
         assert dataset, "Please upload a dataset!"
         
-        f0_method = pitch_extraction_params.get("f0_method")
-        cache_name = get_hash(model_name, dataset, period, overlap, max_volume, alpha, mute_ratio, f0_method)
+        f0_method = pitch_extraction_params.get("f0_method", "")
+        cached_params = [model_name, dataset, period, overlap, max_volume, alpha, mute_ratio, sr, f0_method]
+        crepe_hop_length = pitch_extraction_params.get("crepe_hop_length",160)
+
+        if "crepe" in f0_method: cached_params.append(crepe_hop_length)
+        
+        cache_name = get_hash(*cached_params)
         model_log_dir = os.path.join(output_path,"logs",cache_name)
         os.makedirs(model_log_dir,exist_ok=True)
 
@@ -268,7 +274,7 @@ class RVCProcessDatasetNode:
             
             print(preprocess_trainset(dataset_dir,SR_MAP[sr],n_threads,model_log_dir,period,overlap,max_volume,alpha))
             
-            print(extract_features_trainset(hubert_model(), model_log_dir,n_p=n_threads,f0method=f0_method,device=device,if_f0=bool(f0_method),version="v2"))
+            print(extract_features_trainset(hubert_model(), model_log_dir,n_p=n_threads,f0method=f0_method,device=device,if_f0=bool(f0_method),version="v2",crepe_hop_length=crepe_hop_length))
 
             gt_wavs_dir = os.path.join(model_log_dir,"0_gt_wavs")
             feature_dir = os.path.join(model_log_dir,"3_feature768")
