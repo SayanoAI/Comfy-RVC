@@ -54,7 +54,7 @@ class LoadAudio:
         sr = None if sr=="None" else int(sr)
         audio = load_input_audio(audio_path,sr=sr)
 
-        return {"ui": {"preview": [{"filename": audio_name, "type": "input", "widgetId": widgetId}]}, "result": (audio_name, lambda:audio_to_bytes(*audio), to_audio_dict(*audio))}
+        return {"ui": {"preview": [{"filename": os.path.basename(audio_path), "type": "input", "subfolder": "audio", "widgetId": widgetId}]}, "result": (audio_name, lambda:audio_to_bytes(*audio), to_audio_dict(*audio))}
     
     @classmethod
     def IS_CHANGED(cls, audio, sr):
@@ -72,7 +72,7 @@ class DownloadAudio:
             "optional": {
                 "sr": (["None",16000,44100,48000],{"default": "None"}),
                 "song_name": ("STRING",{"default": ""},),
-                "format": (SUPPORTED_AUDIO,{"default": "mp3"})
+                "format": (SUPPORTED_AUDIO,{"default": "flac"})
             }
         }
 
@@ -82,11 +82,11 @@ class DownloadAudio:
     RETURN_NAMES = ("audio_name","vhs_audio","audio")
     FUNCTION = "download_audio"
 
-    def download_audio(self, url, sr="None", song_name="", format="mp3"):
+    def download_audio(self, url, sr="None", song_name="", format="flac"):
 
         assert "youtube" in url, "Please provide a valid youtube URL!"
 
-        widgetId = get_hash(url, sr)
+        widgetId = get_hash(url, sr, format)
         sr = None if sr=="None" else int(sr)
         audio_name = widgetId if song_name=="" else song_name
         input_dir = os.path.join(input_path,"audio")
@@ -99,7 +99,7 @@ class DownloadAudio:
                 'format': 'bestaudio/best',  # Download the best audio quality available
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
-                    'preferredcodec': "flac",
+                    'preferredcodec': format,
                 }],
                 'outtmpl': os.path.splitext(audio_path)[0],  # Output file name and directory
             }
@@ -109,7 +109,7 @@ class DownloadAudio:
 
             input_audio = load_input_audio(audio_path,sr=sr)
 
-        return {"ui": {"preview": [{"filename": os.path.basename(audio_path), "type": "input", "widgetId": widgetId}]}, "result": (audio_name, lambda:audio_to_bytes(*input_audio),to_audio_dict(*input_audio))}
+        return {"ui": {"preview": [{"filename": os.path.basename(audio_path), "type": "input", "subfolder": "audio", "widgetId": widgetId}]}, "result": (audio_name, lambda:audio_to_bytes(*input_audio),to_audio_dict(*input_audio))}
     
 class MergeAudioNode:
    
