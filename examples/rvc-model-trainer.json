@@ -14,7 +14,7 @@
         "1": 178
       },
       "flags": {},
-      "order": 1,
+      "order": 2,
       "mode": 0,
       "outputs": [
         {
@@ -31,7 +31,7 @@
         "Node name for S&R": "LoadPitchExtractionParams"
       },
       "widgets_values": [
-        "mangio-crepe",
+        "rmvpe+",
         false,
         0.75,
         0,
@@ -78,10 +78,10 @@
         945.4000799560547,
         -349.9999832153321
       ],
-      "size": [
-        418.1999816894531,
-        166
-      ],
+      "size": {
+        "0": 418.1999816894531,
+        "1": 166
+      },
       "flags": {},
       "order": 6,
       "mode": 0,
@@ -124,27 +124,7 @@
       "widgets_values": [
         0,
         "flac",
-        true,
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        }
+        true
       ]
     },
     {
@@ -159,7 +139,7 @@
         "1": 146
       },
       "flags": {},
-      "order": 2,
+      "order": 1,
       "mode": 0,
       "outputs": [
         {
@@ -205,7 +185,7 @@
         "1": 150
       },
       "flags": {},
-      "order": 4,
+      "order": 3,
       "mode": 0,
       "inputs": [
         {
@@ -251,10 +231,10 @@
         1431.4000799560547,
         -346.9999832153321
       ],
-      "size": [
-        315,
-        166
-      ],
+      "size": {
+        "0": 315,
+        "1": 166
+      },
       "flags": {},
       "order": 7,
       "mode": 0,
@@ -302,27 +282,7 @@
       "widgets_values": [
         "None",
         "median",
-        true,
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        },
-        {
-          "hidden": false,
-          "paused": false,
-          "params": {}
-        }
+        true
       ]
     },
     {
@@ -337,7 +297,7 @@
         "1": 294
       },
       "flags": {},
-      "order": 3,
+      "order": 4,
       "mode": 0,
       "inputs": [
         {
@@ -372,8 +332,8 @@
         1,
         3,
         0.3,
-        1,
         0.9500000000000001,
+        0.75,
         0.01,
         "image"
       ]
@@ -387,7 +347,7 @@
       ],
       "size": {
         "0": 506.4000244140625,
-        "1": 358
+        "1": 382
       },
       "flags": {},
       "order": 5,
@@ -406,8 +366,8 @@
           "links": [
             23
           ],
-          "shape": 3,
-          "slot_index": 0
+          "slot_index": 0,
+          "shape": 3
         },
         {
           "name": "model_name",
@@ -421,8 +381,8 @@
           "links": [
             24
           ],
-          "shape": 3,
-          "slot_index": 2
+          "slot_index": 2,
+          "shape": 3
         },
         {
           "name": "pitch_extraction_params",
@@ -430,8 +390,8 @@
           "links": [
             25
           ],
-          "shape": 3,
-          "slot_index": 3
+          "slot_index": 3,
+          "shape": 3
         }
       ],
       "properties": {
@@ -440,7 +400,7 @@
       "widgets_values": [
         "0",
         4,
-        100,
+        300,
         0,
         "pretrained_v2/f0Ov2Super40kD.pth",
         "pretrained_v2/f0Ov2Super40kG.pth",
@@ -448,7 +408,8 @@
         true,
         false,
         true,
-        false
+        true,
+        true
       ]
     }
   ],
@@ -541,7 +502,7 @@
         -413,
         45,
         1303,
-        442
+        466
       ],
       "color": "#b06634",
       "font_size": 24
@@ -561,10 +522,10 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.6209213230591552,
+      "scale": 1.1,
       "offset": [
-        674.1301313489,
-        690.0930429150515
+        652.4400126183286,
+        108.78821868462816
       ]
     }
   },

@@ -260,7 +260,7 @@ class RVCProcessDatasetNode:
         filelist_path = os.path.join(model_log_dir, "filelist.txt")
         
         if not os.path.isfile(filelist_path):
-            dataset_dir = os.path.join(input_path,"datasets",cache_name)
+            dataset_dir = os.path.join(input_path,"datasets",dataset.split(".")[0])
 
             if dataset.endswith("zip"):
                 files = extract_zip_without_structure(os.path.join(dataset_path,dataset),dataset_dir)
@@ -381,7 +381,8 @@ class RVCTrainModelNode:
                 if_cache_gpu=("BOOLEAN",{"default":True}),
                 if_save_every_weights=("BOOLEAN",{"default":False}),
                 train_index=("BOOLEAN",{"default": True}),
-                rerun=("BOOLEAN",{"default": False}),
+                retrain=("BOOLEAN",{"default": False}),
+                save_best_model=("BOOLEAN",{"default": True})
             )
         }
 
@@ -406,7 +407,8 @@ class RVCTrainModelNode:
                     if_cache_gpu=True,
                     if_save_every_weights=False,
                     train_index=True,
-                    rerun=False):
+                    retrain=False,
+                    save_best_model=True):
         
         sample_rate = rvc_dataset_pipe["sample_rate"]
         name = rvc_dataset_pipe["name"]
@@ -433,10 +435,11 @@ class RVCTrainModelNode:
         hparams.save_every_weights = if_save_every_weights
         hparams.if_cache_data_in_gpu = if_cache_gpu
         hparams.data.training_files = rvc_dataset_pipe["training_files"]
+        hparams.save_best_model = save_best_model
 
         file_index = self.train_index(model_dir, sample_rate, name) if train_index else None
         model_path = os.path.join(BASE_MODELS_DIR,"RVC",f"{name}.pth")
-        if os.path.isfile(model_path) and rerun: model_path = increment_filename_no_overwrite(model_path)
+        if os.path.isfile(model_path) and retrain: model_path = increment_filename_no_overwrite(model_path)
         hparams.model_path = model_path
 
         if not os.path.isfile(model_path): train_model(hparams)

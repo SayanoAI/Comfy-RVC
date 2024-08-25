@@ -1,7 +1,7 @@
 from .custom_nodes.audio_nodes import NODE_CLASS_MAPPINGS as audio_nodes, NODE_DISPLAY_NAME_MAPPINGS as audio_nodes_name
 from .custom_nodes.stt import NODE_CLASS_MAPPINGS as stt_nodes, NODE_DISPLAY_NAME_MAPPINGS as stt_nodes_name
 from .custom_nodes.uvr import UVR5Node
-from .custom_nodes.rvc import NODE_CLASS_MAPPINGS as rvc_nodes, NODE_DISPLAY_NAME_MAPPINGS as rvc_nodes_name
+from .custom_nodes.rvc_nodes import NODE_CLASS_MAPPINGS as rvc_nodes, NODE_DISPLAY_NAME_MAPPINGS as rvc_nodes_name
 from .custom_nodes.utility_nodes import NODE_CLASS_MAPPINGS as utility_nodes, NODE_DISPLAY_NAME_MAPPINGS as utility_nodes_name
 from .custom_nodes.musetalk_nodes import NODE_CLASS_MAPPINGS as musetalk_nodes, NODE_DISPLAY_NAME_MAPPINGS as musetalk_nodes_name
 # Set the web directory, any .js file in that directory will be loaded by the frontend as a frontend extension
