@@ -203,7 +203,7 @@ class PreviewAudio:
             output_path = increment_filename_no_overwrite(output_path)
         
         input_audio = get_audio(audio)
-        print(save_input_audio(output_path,input_audio,to_int16=True,to_stereo=save_channels==2))
+        print(save_input_audio(output_path,input_audio,to_int16=save_format!="mp3",to_stereo=save_channels==2))
 
         tempdir = os.path.join(temp_path,"preview")
         os.makedirs(tempdir, exist_ok=True)

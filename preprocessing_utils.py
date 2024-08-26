@@ -1,19 +1,17 @@
 import sys, os, multiprocessing
 from threading import Thread
 import numpy as np, os, traceback
-from .lib.model_utils import load_hubert
 from .lib.slicer2 import Slicer
-import librosa, traceback
+import traceback
 from scipy.io import wavfile
-from .lib.audio import load_audio
 from .pitch_extraction import FeatureExtractor
-from .lib.audio import load_input_audio
+from .lib.audio import load_input_audio, remix_audio
 from .lib.utils import gc_collect
 from .config import config
 import torch
 
 class Preprocess:
-    def __init__(self, sr, exp_dir, noparallel=True, period=3.0, overlap=.3, alpha=.75, max_volume=.95):
+    def __init__(self, sr, exp_dir, noparallel=True, period=3.0, overlap=.3, max_volume=.95):
         self.slicer = Slicer(
             sr=sr,
             threshold=-42,
@@ -26,11 +24,10 @@ class Preprocess:
         self.per = period
         self.overlap = overlap
         self.tail = self.per + self.overlap
-        self.max = max_volume
-        self.alpha = alpha
+        self.max_volume = max_volume
         self.exp_dir = exp_dir
-        self.gt_wavs_dir = "%s/0_gt_wavs" % exp_dir
-        self.wavs16k_dir = "%s/1_16k_wavs" % exp_dir
+        self.gt_wavs_dir = os.path.join(exp_dir,"0_gt_wavs")
+        self.wavs16k_dir = os.path.join(exp_dir,"1_16k_wavs")
         self.noparallel = noparallel
         os.makedirs(self.exp_dir, exist_ok=True)
         os.makedirs(self.gt_wavs_dir, exist_ok=True)
@@ -45,26 +42,9 @@ class Preprocess:
         # mutex.release()
 
     def norm_write(self, tmp_audio, idx0, idx1):
-        tmp_max = np.abs(tmp_audio).max()
-        if tmp_max > 2.5:
-            print("%s-%s-%s-filtered" % (idx0, idx1, tmp_max))
-            return
-        tmp_audio = (tmp_audio / tmp_max * (self.max * self.alpha)) + (
-            1 - self.alpha
-        ) * tmp_audio
-        wavfile.write(
-            "%s/%s_%s.wav" % (self.gt_wavs_dir, idx0, idx1),
-            self.sr,
-            tmp_audio.astype(np.float32),
-        )
-        tmp_audio = librosa.resample(
-            tmp_audio, orig_sr=self.sr, target_sr=16000
-        )  # , res_type="soxr_vhq"
-        wavfile.write(
-            "%s/%s_%s.wav" % (self.wavs16k_dir, idx0, idx1),
-            16000,
-            tmp_audio.astype(np.float32),
-        )
+        wavfile.write(os.path.join(self.gt_wavs_dir, f"{idx0}_{idx1}.wav"),self.sr,tmp_audio.astype(np.float32))
+        remixed_audio = remix_audio((tmp_audio, self.sr), target_sr=16000, norm=True,max_volume=self.max_volume)
+        wavfile.write(os.path.join(self.wavs16k_dir, f"{idx0}_{idx1}.wav"),16000,remixed_audio[0].astype(np.float32))
 
     def pipeline(self, path, idx0):
         try:
@@ -208,9 +188,9 @@ class FeatureInput(FeatureExtractor):
                 except:
                     self.printt("f0fail-%s-%s-%s" % (idx, inp_path, traceback.format_exc()))
 
-def preprocess_trainset(inp_root, sr, n_p, exp_dir, period=3.0, overlap=.3, max_volume=1., alpha=.75):
+def preprocess_trainset(inp_root, sr, n_p, exp_dir, period=3.0, overlap=.3, max_volume=1.):
     try:
-        pp = Preprocess(sr, exp_dir, period=period, overlap=overlap, max_volume=max_volume, alpha=alpha)
+        pp = Preprocess(sr, exp_dir, period=period, overlap=overlap, max_volume=max_volume)
         pp.println("start preprocess")
         pp.println(sys.argv)
         pp.pipeline_mp_inp_dir(inp_root, n_p)

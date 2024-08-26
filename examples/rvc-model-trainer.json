@@ -1,27 +1,27 @@
 {
-  "last_node_id": 15,
-  "last_link_id": 25,
+  "last_node_id": 17,
+  "last_link_id": 30,
   "nodes": [
     {
       "id": 3,
       "type": "LoadPitchExtractionParams",
       "pos": [
-        -397,
-        179
+        -387,
+        130
       ],
       "size": {
         "0": 315,
-        "1": 178
+        "1": 202
       },
       "flags": {},
-      "order": 2,
+      "order": 0,
       "mode": 0,
       "outputs": [
         {
           "name": "pitch_extraction_params",
           "type": "PITCH_EXTRACTION",
           "links": [
-            17
+            29
           ],
           "slot_index": 0,
           "shape": 3
@@ -36,7 +36,8 @@
         0.75,
         0,
         0.25,
-        0.25
+        0.25,
+        160
       ]
     },
     {
@@ -51,14 +52,14 @@
         "1": 58
       },
       "flags": {},
-      "order": 0,
+      "order": 1,
       "mode": 0,
       "outputs": [
         {
           "name": "hubert_model",
           "type": "HUBERT_MODEL",
           "links": [
-            16
+            28
           ],
           "slot_index": 0,
           "shape": 3
@@ -139,7 +140,7 @@
         "1": 146
       },
       "flags": {},
-      "order": 1,
+      "order": 2,
       "mode": 0,
       "outputs": [
         {
@@ -185,7 +186,7 @@
         "1": 150
       },
       "flags": {},
-      "order": 3,
+      "order": 4,
       "mode": 0,
       "inputs": [
         {
@@ -286,64 +287,11 @@
       ]
     },
     {
-      "id": 13,
-      "type": "RVCProcessDatasetNode",
-      "pos": [
-        -8,
-        176
-      ],
-      "size": {
-        "0": 337.6000061035156,
-        "1": 294
-      },
-      "flags": {},
-      "order": 4,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "hubert_model",
-          "type": "HUBERT_MODEL",
-          "link": 16
-        },
-        {
-          "name": "pitch_extraction_params",
-          "type": "PITCH_EXTRACTION",
-          "link": 17
-        }
-      ],
-      "outputs": [
-        {
-          "name": "rvc_dataset_pipe",
-          "type": "RVC_DATASET_PIPE",
-          "links": [
-            22
-          ],
-          "slot_index": 0,
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "RVCProcessDatasetNode"
-      },
-      "widgets_values": [
-        "Comfy-Sayano",
-        "Sayano.zip",
-        "40k",
-        1,
-        3,
-        0.3,
-        0.9500000000000001,
-        0.75,
-        0.01,
-        "image"
-      ]
-    },
-    {
       "id": 15,
       "type": "RVCTrainModelNode",
       "pos": [
         374,
-        119
+        118
       ],
       "size": {
         "0": 506.4000244140625,
@@ -356,7 +304,7 @@
         {
           "name": "rvc_dataset_pipe",
           "type": "RVC_DATASET_PIPE",
-          "link": 22
+          "link": 30
         }
       ],
       "outputs": [
@@ -399,17 +347,69 @@
       },
       "widgets_values": [
         "0",
-        4,
-        300,
-        0,
-        "pretrained_v2/f0Ov2Super40kD.pth",
-        "pretrained_v2/f0Ov2Super40kG.pth",
+        5,
+        100,
+        10,
+        "pretrained_v2/G_DMR-V1-32k-f0.pth",
+        "pretrained_v2/D_DMR-V1-32k-f0.pth",
         true,
-        true,
+        false,
         false,
         true,
         true,
         true
+      ]
+    },
+    {
+      "id": 17,
+      "type": "RVCProcessDatasetNode",
+      "pos": [
+        -8,
+        176
+      ],
+      "size": {
+        "0": 337.6000061035156,
+        "1": 270
+      },
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "hubert_model",
+          "type": "HUBERT_MODEL",
+          "link": 28
+        },
+        {
+          "name": "pitch_extraction_params",
+          "type": "PITCH_EXTRACTION",
+          "link": 29
+        }
+      ],
+      "outputs": [
+        {
+          "name": "rvc_dataset_pipe",
+          "type": "RVC_DATASET_PIPE",
+          "links": [
+            30
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RVCProcessDatasetNode"
+      },
+      "widgets_values": [
+        "Comfy-Mae",
+        "Mae.zip",
+        "32k",
+        12,
+        3,
+        0.5,
+        0.9500000000000001,
+        0.01,
+        "image"
       ]
     }
   ],
@@ -447,30 +447,6 @@
       "AUDIO,VHS_AUDIO"
     ],
     [
-      16,
-      5,
-      0,
-      13,
-      0,
-      "HUBERT_MODEL"
-    ],
-    [
-      17,
-      3,
-      0,
-      13,
-      1,
-      "PITCH_EXTRACTION"
-    ],
-    [
-      22,
-      13,
-      0,
-      15,
-      0,
-      "RVC_DATASET_PIPE"
-    ],
-    [
       23,
       15,
       0,
@@ -493,6 +469,30 @@
       6,
       3,
       "PITCH_EXTRACTION"
+    ],
+    [
+      28,
+      5,
+      0,
+      17,
+      0,
+      "HUBERT_MODEL"
+    ],
+    [
+      29,
+      3,
+      0,
+      17,
+      1,
+      "PITCH_EXTRACTION"
+    ],
+    [
+      30,
+      17,
+      0,
+      15,
+      0,
+      "RVC_DATASET_PIPE"
     ]
   ],
   "groups": [
@@ -522,10 +522,10 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 1.1,
+      "scale": 0.6830134553650705,
       "offset": [
-        652.4400126183286,
-        108.78821868462816
+        544.5635228085466,
+        563.3345057885277
       ]
     }
   },

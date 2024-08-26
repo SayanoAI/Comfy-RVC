@@ -235,8 +235,7 @@ class RVCProcessDatasetNode:
                 "n_threads": ("INT", {"default": get_optimal_threads(), "min": 1, "max": multiprocessing.cpu_count()}),
                 "period": ("FLOAT", {"default": 3., "min": 1., "max": 10., "step": .1}),
                 "overlap": ("FLOAT",{"default": .3, "min": .1, "max": 1., "step": .1}),
-                "max_volume": ("FLOAT",{"default": 1., "min": .1, "max": 1., "step": .05}),
-                "alpha": ("FLOAT",{"default": .75, "min": .05, "max": 1., "step": .05}),
+                "max_volume": ("FLOAT",{"default": .99, "min": .1, "max": 1., "step": .01}),
                 "mute_ratio": ("FLOAT",{"default": .0, "min": .0, "max": .5, "step": .01}),
             }
         }
@@ -248,13 +247,13 @@ class RVCProcessDatasetNode:
 
     CATEGORY = CATEGORY
 
-    def process(self, model_name: str, dataset: str, hubert_model, pitch_extraction_params={}, sr="40k", n_threads=1, period=3., overlap=.3, max_volume=1., alpha=.75, mute_ratio=.0):
+    def process(self, model_name: str, dataset: str, hubert_model, pitch_extraction_params={}, sr="40k", n_threads=1, period=3., overlap=.3, max_volume=1., mute_ratio=.0):
         
         assert model_name, "Please provide a model name!"
         assert dataset, "Please upload a dataset!"
         
         f0_method = pitch_extraction_params.get("f0_method", "")
-        cached_params = [model_name, dataset, period, overlap, max_volume, alpha, mute_ratio, sr, f0_method]
+        cached_params = [model_name, dataset, period, overlap, max_volume, mute_ratio, sr, f0_method]
         crepe_hop_length = pitch_extraction_params.get("crepe_hop_length",160)
 
         if "crepe" in f0_method: cached_params.append(crepe_hop_length)
@@ -272,7 +271,7 @@ class RVCProcessDatasetNode:
                 files = extract_zip_without_structure(os.path.join(dataset_path,dataset),dataset_dir)
                 assert len(files), "Failed to extract zip file..."
             
-            print(preprocess_trainset(dataset_dir,SR_MAP[sr],n_threads,model_log_dir,period,overlap,max_volume,alpha))
+            print(preprocess_trainset(dataset_dir,SR_MAP[sr],n_threads,model_log_dir,period,overlap,max_volume))
             
             print(extract_features_trainset(hubert_model(), model_log_dir,n_p=n_threads,f0method=f0_method,device=device,if_f0=bool(f0_method),version="v2",crepe_hop_length=crepe_hop_length))
 

@@ -44,7 +44,7 @@ def load_audio(file, sr, **kwargs):
 
     return remix_audio((np.frombuffer(out, np.float32).flatten(), sr),**kwargs)
 
-def remix_audio(input_audio,target_sr=None,norm=False,to_int16=False,resample=False,axis=0,merge_type=None,**kwargs):
+def remix_audio(input_audio,target_sr=None,norm=False,to_int16=False,resample=False,axis=0,merge_type=None,max_volume=.99,**kwargs):
     audio = np.array(input_audio[0],dtype="float32")
     if target_sr is None: target_sr=input_audio[1]
 
@@ -57,10 +57,10 @@ def remix_audio(input_audio,target_sr=None,norm=False,to_int16=False,resample=Fa
         audio=merge_func(audio,axis=axis)
     if norm: audio = librosa.util.normalize(audio,axis=axis)
 
-    audio_max = np.abs(audio).max()/.99
+    audio_max = np.abs(audio).max()/max_volume
     if audio_max > 1: audio = audio / audio_max
         
-    if to_int16: audio = np.clip(audio * MAX_INT16, a_min=-MAX_INT16+1, a_max=MAX_INT16-1).astype("int16")
+    if to_int16: audio = np.clip(audio * MAX_INT16, a_min=1-MAX_INT16, a_max=MAX_INT16-1).astype("int16")
     print(f"after remix: shape={audio.shape}, max={audio.max()}, min={audio.min()}, mean={audio.mean()}, sr={target_sr}")
 
     return audio, target_sr
@@ -71,16 +71,14 @@ def load_input_audio(fname,sr=None,**kwargs):
     print(f"loading sound {fname=} {audio.ndim=} {audio.max()=} {audio.min()=} {audio.dtype=} {sr=}")
     return audio, sr
    
-def save_input_audio(fname,input_audio,sr=None,to_int16=False,to_stereo=False):
+def save_input_audio(fname,input_audio,sr=None,to_int16=False,to_stereo=False,max_volume=.99):
     print(f"saving sound to {fname}")
     os.makedirs(os.path.dirname(fname),exist_ok=True)
     audio=np.array(input_audio[0],dtype="float32")
 
-    if to_int16:
-        audio_max = np.abs(audio).max()/.99
-        if audio_max > 1: audio = audio / audio_max
-        audio = np.clip(audio * MAX_INT16, a_min=-MAX_INT16+1, a_max=MAX_INT16-1)
-
+    audio_max = np.abs(audio).max()/max_volume
+    if audio_max > 1: audio = audio / audio_max
+    if to_int16: audio = np.clip(audio * MAX_INT16, a_min=1-MAX_INT16, a_max=MAX_INT16-1)
     if to_stereo and audio.ndim<2: audio=np.stack([audio,audio],axis=-1)
     
     try:
