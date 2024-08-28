@@ -263,11 +263,11 @@ class BatchedTranscriptionEncoderNode:
                 "use_tags": ('BOOLEAN', {'default': False}),
                 "use_sentiment": ('BOOLEAN', {'default': False}),
                 'language': (SUPPORTED_LANGUAGES,{"default": "en"}),
-                "max_chunks": ('INT', {"min": 2, "default": None}),
-                "max_words": ('INT', {'default': 16, "min": 0, "max": 32, "display": "slider"}),
+                "max_chunks": ('INT', {"min": 0, "default": 0}),
+                "max_words": ('INT', {'default': 16, "min": 0, "max": 32}),
                 "frame_interpolation": ("INT", {"default": 0, "min": 0, "max": 120, "hidden": True}), # needs more testing
-                "prefix": ("STRING", {"default": "masterpiece, best quality", "multiline": True, "forceInput": True}),
-                "suffix": ("STRING", {"default": "", "multiline": True, "forceInput": True}),
+                "prefix": ("STRING", {"default": "masterpiece, best quality", "multiline": True}),
+                "suffix": ("STRING", {"default": "", "multiline": True}),
                 "print_output": ('BOOLEAN', {'default': True}),
                 "weights": ("FLOAT",{"default": 1., "step": .01}),
                 "pad_frames": ("INT", {"default": 0})
@@ -299,7 +299,7 @@ class BatchedTranscriptionEncoderNode:
 
     def get_prompt(
         self, transcription, clip, language="en", loop=False, use_tags=False, use_sentiment=False,
-        max_words=16,max_chunks=None, frame_interpolation=0, print_output=True, prefix="", suffix="",
+        max_words=16,max_chunks=0, frame_interpolation=0, print_output=True, prefix="", suffix="",
         weights=1., pad_frames=0
     ):
 

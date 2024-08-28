@@ -124,7 +124,7 @@ def Silent(audio_in, sample_rate, threshold_dB = -50):
 
 	start = 0; end = 0
 	audio = audio_in.copy()
-	audio_length = audio_in.shape[1]
+	audio_length = audio_in.shape[-1]
 
 	for i in range(0, audio_length, window_frame):
 		
@@ -241,71 +241,53 @@ def Change_sample_rate(audio, way, current_cutoff, target_cutoff):
 
 	pitched_audio = librosa.resample(audio, orig_sr = current_cutoff * 2, target_sr = target_cutoff * 2, res_type = 'kaiser_best', axis=1)
 
-	# print(f"SRS input audio shape: {audio.shape}")
-	# print(f"SRS output audio shape: {pitched_audio.shape}")
-	# print (f"ratio : {ratio}")
-
 	return pitched_audio
 
-# def Remove_High_freq_Noise(audio, threshold_freq):
+def Remove_High_freq_Noise(audio, threshold_freq):
 
-# 	# Calculer la transformée de Fourier
-# 	stft = librosa.stft(audio)
+	# Calculer la transformée de Fourier
+	stft = librosa.stft(audio)
 	
-# 	# Calculer la somme des amplitudes pour chaque fréquence dans le spectre
-# 	amplitude_sum = np.sum(np.abs(stft), axis=0)
+	# Calculer la somme des amplitudes pour chaque fréquence dans le spectre
+	amplitude_sum = np.sum(np.abs(stft), axis=0)
 
-# 	# Appliquer un masque pour supprimer les fréquences supérieures lorsque la somme des amplitudes est inférieure au seuil
-# 	stft[:, amplitude_sum > threshold_freq] = 0.0
+	# Appliquer un masque pour supprimer les fréquences supérieures lorsque la somme des amplitudes est inférieure au seuil
+	stft[:, amplitude_sum > threshold_freq] = 0.0
 
-# 	# Reconstruire l'audio à partir du STFT modifié
-	# 	audio_filtered = librosa.istft(stft)
+	# Reconstruire l'audio à partir du STFT modifié
+	audio_filtered = librosa.istft(stft)
 
-# 	return audio_filtered
+	return audio_filtered
 
-# def Match_Freq_CutOFF(self, audio1, audio2, sample_rate):
-# 	# This option matches the Primary stem frequency cut-off to the Secondary stem frequency cut-off
-# 	# (if the Primary stem frequency cut-off is lower than the Secondary stem frequency cut-off)
+# Find the high cut-off frequency of the input audio
+def Find_Cut_OFF(audio, sample_rate, threshold=0.01):
 
-# 	# Get the Primary stem frequency cut-off
-# 	freq_cut_off1 = Find_Cut_OFF(audio1, sample_rate)
-# 	freq_cut_off2 = Find_Cut_OFF(audio2, sample_rate)
+	# Appliquer un filtre passe-bas pour réduire le bruit
+	cutoff_frequency = sample_rate / 2.0  # Fréquence de Nyquist (la moitié du taux d'échantillonnage)
 
-# 	# Match the Primary stem frequency cut-off to the Secondary stem frequency cut-off
-# 	if freq_cut_off1 < freq_cut_off2:
-# 		audio1 = Resize_Freq_CutOFF(audio1, freq_cut_off2, sample_rate)
+	# Définir l'ordre du filtre passe-bas
+	order = 6
 
-# 	return audio1
+	# Calculer les coefficients du filtre passe-bas
+	b, a = signal.butter(order, cutoff_frequency - threshold, btype='low', analog=False, fs=sample_rate)
 
-# # Find the high cut-off frequency of the input audio
-# def Find_Cut_OFF(audio, sample_rate, threshold=0.01):
+	# Appliquer le filtre au signal audio
+	filtered_audio = signal.lfilter(b, a, audio, axis=0)
 
-# 	# Appliquer un filtre passe-bas pour réduire le bruit
-# 	cutoff_frequency = sample_rate / 2.0  # Fréquence de Nyquist (la moitié du taux d'échantillonnage)
+	# Calculer la FFT du signal audio filtré
+	fft_result = np.fft.fft(filtered_audio, axis=0)
 
-# 	# Définir l'ordre du filtre passe-bas
-# 	order = 6
+	# Calculer les magnitudes du spectre de fréquence
+	magnitudes = np.abs(fft_result)
 
-# 	# Calculer les coefficients du filtre passe-bas
-# 	b, a = signal.butter(order, cutoff_frequency - threshold, btype='low', analog=False, fs=sample_rate)
+	# Calculer les fréquences correspondant aux bins de la FFT
+	frequencies = np.fft.fftfreq(len(audio), 1.0 / sample_rate)
 
-# 	# Appliquer le filtre au signal audio
-# 	filtered_audio = signal.lfilter(b, a, audio, axis=0)
+	# Trouver la fréquence de coupure où la magnitude tombe en dessous du seuil
+	cut_off_frequencies = frequencies[np.where(magnitudes > threshold)]
 
-# 	# Calculer la FFT du signal audio filtré
-# 	fft_result = np.fft.fft(filtered_audio, axis=0)
-
-# 	# Calculer les magnitudes du spectre de fréquence
-# 	magnitudes = np.abs(fft_result)
-
-# 	# Calculer les fréquences correspondant aux bins de la FFT
-# 	frequencies = np.fft.fftfreq(len(audio), 1.0 / sample_rate)
-
-# 	# Trouver la fréquence de coupure où la magnitude tombe en dessous du seuil
-# 	cut_off_frequencies = frequencies[np.where(magnitudes > threshold)]
-
-# 	# Trouver la fréquence de coupure maximale parmi toutes les valeurs
-# 	return int(max(cut_off_frequencies))
+	# Trouver la fréquence de coupure maximale parmi toutes les valeurs
+	return int(max(cut_off_frequencies))
 
 
 

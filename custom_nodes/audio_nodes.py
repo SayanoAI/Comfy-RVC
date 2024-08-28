@@ -6,19 +6,13 @@ import yt_dlp
 import torch
 from .settings import MERGE_OPTIONS
 from .utils import MultipleTypeProxy, increment_filename_no_overwrite
-from ..lib.audio import MAX_INT16, SUPPORTED_AUDIO, audio_to_bytes, bytes_to_audio, load_input_audio, pad_audio, remix_audio, save_input_audio
+from ..lib.audio import MAX_INT16, SUPPORTED_AUDIO, AudioProcessor, audio_to_bytes, get_audio, load_input_audio, pad_audio, remix_audio, save_input_audio
 from ..lib.utils import get_filenames, get_hash, get_merge_func
 import folder_paths
 
 CATEGORY = "🌺RVC-Studio/audio"
 input_path = folder_paths.get_input_directory()
 temp_path = folder_paths.get_temp_directory()
-
-def get_audio(audio):
-    if hasattr(audio,"__call__"): #VHS_AUDIO is a function
-        return bytes_to_audio(audio())
-    else: #comfyui AUDIO is a dict
-        return audio["waveform"].squeeze(0).transpose(0,1).numpy(), audio["sample_rate"]
 
 def to_audio_dict(audio, sr):
     #from https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite/blob/bf2a9402d0b2727c7170c43621d569f4d531015f/videohelpersuite/nodes.py#L706C22-L706C67
@@ -112,9 +106,6 @@ class DownloadAudio:
         return {"ui": {"preview": [{"filename": os.path.basename(audio_path), "type": "input", "subfolder": "audio", "widgetId": widgetId}]}, "result": (audio_name, lambda:audio_to_bytes(*input_audio),to_audio_dict(*input_audio))}
     
 class MergeAudioNode:
-   
-    def __init__(self):
-        pass
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -163,8 +154,6 @@ class MergeAudioNode:
         return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda: audio_to_bytes(*merged_audio),to_audio_dict(*merged_audio))}
     
 class PreviewAudio:
-    def __init__(self):
-        pass
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -215,23 +204,78 @@ class PreviewAudio:
             "filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId, "autoplay": autoplay
             }]}, "result": (output_path, lambda:audio_to_bytes(*input_audio), to_audio_dict(*input_audio))}
     
+
+class ProcessAudioNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "normalize": ("BOOLEAN",{"default": True}),
+                "threshold_silence": ("BOOLEAN",{"default": True}),
+                "dynamic_threshold": ("BOOLEAN",{"default": True})
+            },
+            "optional": {
+                "audio": (MultipleTypeProxy('AUDIO,VHS_AUDIO'),{"default": None}),
+                "dynamic_threshold_sample_size": ("INT",{"default": 4000, "min": 160, "max": 48000, "step": 160}),
+                "dynamic_threshold_multiplier": ("FLOAT",{"default": 2.}),
+                "dynamic_threshold_fill_method": (["median","interpolation"],{"default": "median"}),
+                "dynamic_threshold_kernel_size": ("INT",{"default": 5}),
+                "silence_threshold_db": ("INT",{"default": -50, "min": -120, "max": 0}),
+                "normalize_threshold_db": ("INT",{"default": -1, "min": -10, "max": 0})
+            }
+        }
+    
+    RETURN_TYPES = ("AUDIO_PROCESSOR","VHS_AUDIO","AUDIO")
+    RETURN_NAMES = ("audio_processor","vhs_audio","audio")
+
+    CATEGORY = CATEGORY
+
+    FUNCTION = "process_audio"
+
+    def process_audio(self, normalize, threshold_silence, dynamic_threshold, audio=None,
+                      dynamic_threshold_sample_size=16000,
+                      dynamic_threshold_multiplier=2.0,
+                      dynamic_threshold_fill_method="median",
+                      dynamic_threshold_kernel_size=5,
+                      silence_threshold_db=-50,
+                      normalize_threshold_db=-1):
+
+        audio_processor = AudioProcessor(
+            normalize=normalize,
+            threshold_silence=threshold_silence,
+            dynamic_threshold=dynamic_threshold,
+            sample_size=dynamic_threshold_sample_size,
+            multiplier=dynamic_threshold_multiplier,
+            fill_method=dynamic_threshold_fill_method,
+            kernel_size=dynamic_threshold_kernel_size,
+            silence_threshold_db=silence_threshold_db,
+            normalize_threshold_db=normalize_threshold_db)
+        
+        if audio is None:
+            vhs_audio = comfy_audio = audio
+        else:
+            output_audio = audio_processor(audio)
+            vhs_audio = lambda:audio_to_bytes(*output_audio)
+            comfy_audio = to_audio_dict(*output_audio)
+
+        return ( audio_processor, vhs_audio, comfy_audio)
+    
+
 class AudioBatchValueNode:
-    def __init__(self):
-        pass
 
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "audio": (MultipleTypeProxy('AUDIO,VHS_AUDIO'),),
-                "num_segments": ('INT', {"min": 2, "max": 128, "step": 1, "forceInput": True}),
+                "num_segments": ('INT', {"default": 2, "min": 2, "max": 256, "step": 1}),
                 "output_min": ('FLOAT', {'default': 0., "min": -1000., "max": 1000., "step": .01}),
                 "output_max": ('FLOAT', {'default': 1., "min": 0., "max": 1000., "step": .01}),
                 "norm": (["scale","tanh","sigmoid"], {"default": "scale"}),
             },
             "optional": {
-                "silence_threshold": ("INT", {"default": 1000, "min": 1, "max": MAX_INT16, "step": 1, "display": "slider"}),
-                "duration_list": ("INT", {"default": None, "min": 1, "forceInput": True}),
+                "silence_threshold": ("INT", {"default": 1000, "min": 1, "max": MAX_INT16, "step": 1}),
+                "duration_list": ("INT", {"default": 0, "min": 0, "forceInput": True}),
                 "print_output": ("BOOLEAN", {"default": False}),
                 "inverse": ("BOOLEAN", {"default": False}),
             }
@@ -248,8 +292,7 @@ class AudioBatchValueNode:
     def get_rms(audio): # root mean squared of audio segment
         return np.sqrt(np.nanmean(audio**2))
 
-    def get_frame_weights(self, audio, num_segments, output_min, output_max, norm,
-                          silence_threshold=1000, duration_list=None, print_output=False, inverse=False):
+    def get_frame_weights(self, audio, num_segments, output_min, output_max, norm, silence_threshold=1000, duration_list=0, print_output=False, inverse=False):
         assert output_max>=output_min, f"{output_max=} must be greater or equal to {output_min=}!"
 
         audio_data = get_audio(audio)
@@ -277,7 +320,7 @@ class AudioBatchValueNode:
             print(f"{audio_rms.min()=} {audio_rms.max()=} {audio_rms.mean()=} {len(audio_rms)=}")
             print(f"{x_norm.min()=} {x_norm.max()=} {x_norm.mean()=} {len(x_norm)=}")
         
-        if duration_list is not None:
+        if isinstance(duration_list,list):
             segments = np.cumsum(duration_list)
             x_norm = np.array_split(x_norm,segments)
             x_norm = map(list,x_norm)
@@ -293,6 +336,7 @@ NODE_CLASS_MAPPINGS = {
     "MergeAudioNode": MergeAudioNode,
     "AudioBatchValueNode": AudioBatchValueNode,
     "DownloadAudio": DownloadAudio,
+    "ProcessAudioNode": ProcessAudioNode
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -301,4 +345,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RVC-Studio.PreviewAudio": "🌺Save Audio",
     "MergeAudioNode": "🌺Merge Audio",
     "AudioBatchValueNode": "🌺Audio RMS Batch Values",
+    "ProcessAudioNode": "🌺Audio Processor"
 }

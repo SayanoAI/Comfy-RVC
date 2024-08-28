@@ -2,11 +2,13 @@ import base64
 import io
 import os
 import zlib
-from .utils import get_merge_func
+from .utils import get_hash, get_merge_func
 import numpy as np
 import librosa
 import soundfile as sf
 import ffmpeg
+from scipy.ndimage import uniform_filter1d, median_filter
+from scipy.interpolate import interp1d
 
 MAX_INT16 = 32768
 SUPPORTED_AUDIO = ["mp3","flac","wav"] # ogg breaks soundfile
@@ -25,6 +27,92 @@ AUTOTUNE_NOTES = np.array([
     2093.00, 2217.46, 2349.32, 2489.02, 2637.02, 2793.83,
     2959.96, 3135.96, 3322.44, 3520.00, 3729.31, 3951.07
 ])
+
+class AudioProcessor:
+    def __init__(self, normalize=True, threshold_silence=True, dynamic_threshold=True, sample_size=16000, multiplier=2.0, fill_method="median", kernel_size=5, silence_threshold_db=-50, normalize_threshold_db=-1):
+        self.normalize=normalize
+        self.threshold_silence=threshold_silence
+        self.dynamic_threshold=dynamic_threshold
+        self.sample_size=sample_size
+        self.multiplier=multiplier
+        self.fill_method=fill_method
+        self.kernel_size=kernel_size
+        self.silence_threshold_db=silence_threshold_db
+        self.normalize_threshold_db=normalize_threshold_db
+
+    def __str__(self) -> str:
+        values = [self.normalize, self.threshold_silence, self.dynamic_threshold]
+        if self.normalize: values.append(self.normalize_threshold_db)
+        if self.threshold_silence: values.append(self.silence_threshold_db)
+        if self.dynamic_threshold: values.extend([self.sample_size, self.multiplier, self.fill_method, self.kernel_size])
+        return get_hash(*values)
+
+    def __call__(self, audio):
+        from .karafan.audio_utils import Normalize, Silent
+
+        samples,sr = get_audio(audio)
+        
+        if self.threshold_silence:
+            samples = np.atleast_2d([samples])
+            samples = Silent(samples, sample_rate=sr, threshold_dB=self.silence_threshold_db)
+            samples = np.squeeze(samples, 0)
+        if self.dynamic_threshold: samples = self.dynamic_thresholding(
+            samples,
+            multiplier=self.multiplier,
+            sample_size=self.sample_size,
+            method=self.fill_method,
+            kernel_size=self.kernel_size)
+        if self.normalize: samples = Normalize(samples,threshold_dB=self.normalize_threshold_db)
+
+        return samples, sr
+
+    @staticmethod
+    def dynamic_thresholding(samples, multiplier=2., sample_size=16000, method="median", kernel_size=5):
+        # Calculate the local RMS (root mean square) to estimate the local amplitude
+        local_rms = np.sqrt(uniform_filter1d(np.square(samples), size=int(sample_size)))
+        
+        # Set dynamic threshold as a multiple of the local RMS
+        dynamic_threshold = multiplier * local_rms
+        
+        # Detect clicks where the absolute value exceeds the dynamic threshold
+        clicks = np.abs(samples) > dynamic_threshold
+        
+        # Replace clicks using the specified method
+        cleaned_samples = AudioProcessor.replace_clicks(samples, clicks, method=method, kernel_size=kernel_size)
+        return cleaned_samples
+
+    @staticmethod
+    def replace_clicks(samples, clicks, method="median", kernel_size=5):
+        if method == "median":
+            # Replace detected clicks with the median value of surrounding samples
+            cleaned_samples = samples.copy()
+            cleaned_samples[clicks] = median_filter(samples, size=kernel_size)[clicks]
+        elif method == "interpolation":
+            # Replace detected clicks with interpolation
+            cleaned_samples = samples.copy()
+            
+            # Indices of non-clicks (valid points for interpolation)
+            non_click_indices = np.where(~clicks)[0]
+            
+            # Indices of clicks (points to be replaced)
+            click_indices = np.where(clicks)[0]
+            
+            # Interpolation function
+            interp_func = interp1d(non_click_indices, cleaned_samples[non_click_indices], kind='linear', bounds_error=False, fill_value="extrapolate")
+            
+            # Replace click samples with interpolated values
+            cleaned_samples[click_indices] = interp_func(click_indices)
+        else:
+            raise ValueError("Method must be 'median' or 'interpolation'")
+        
+        return cleaned_samples
+
+def get_audio(audio):
+    if hasattr(audio,"__call__"): #VHS_AUDIO is a function
+        return bytes_to_audio(audio())
+    elif isinstance(audio,dict): #comfyui AUDIO is a dict
+        return audio["waveform"].squeeze(0).transpose(0,1).numpy(), audio["sample_rate"]
+    else: return audio
 
 def load_audio(file, sr, **kwargs):
     try:

@@ -5,13 +5,13 @@ from .lib.slicer2 import Slicer
 import traceback
 from scipy.io import wavfile
 from .pitch_extraction import FeatureExtractor
-from .lib.audio import load_input_audio, remix_audio
+from .lib.audio import load_input_audio, remix_audio, AudioProcessor
 from .lib.utils import gc_collect
 from .config import config
 import torch
 
 class Preprocess:
-    def __init__(self, sr, exp_dir, noparallel=True, period=3.0, overlap=.3, max_volume=.95):
+    def __init__(self, sr, exp_dir, preprocessor: "AudioProcessor"=None, noparallel=True, period=3.0, overlap=.3, max_volume=.95):
         self.slicer = Slicer(
             sr=sr,
             threshold=-42,
@@ -29,6 +29,7 @@ class Preprocess:
         self.gt_wavs_dir = os.path.join(exp_dir,"0_gt_wavs")
         self.wavs16k_dir = os.path.join(exp_dir,"1_16k_wavs")
         self.noparallel = noparallel
+        self.preprocessor = preprocessor
         os.makedirs(self.exp_dir, exist_ok=True)
         os.makedirs(self.gt_wavs_dir, exist_ok=True)
         os.makedirs(self.wavs16k_dir, exist_ok=True)
@@ -42,16 +43,19 @@ class Preprocess:
         # mutex.release()
 
     def norm_write(self, tmp_audio, idx0, idx1):
-        wavfile.write(os.path.join(self.gt_wavs_dir, f"{idx0}_{idx1}.wav"),self.sr,tmp_audio.astype(np.float32))
-        remixed_audio = remix_audio((tmp_audio, self.sr), target_sr=16000, norm=True,max_volume=self.max_volume)
-        wavfile.write(os.path.join(self.wavs16k_dir, f"{idx0}_{idx1}.wav"),16000,remixed_audio[0].astype(np.float32))
+        if len(tmp_audio) > self.overlap*self.sr*2:
+            wavfile.write(os.path.join(self.gt_wavs_dir, f"{idx0}_{idx1}.wav"),self.sr,tmp_audio.astype(np.float32))
+            remixed_audio = remix_audio((tmp_audio, self.sr), target_sr=16000, max_volume=self.max_volume)
+            wavfile.write(os.path.join(self.wavs16k_dir, f"{idx0}_{idx1}.wav"),16000,remixed_audio[0].astype(np.float32))
+        else: print(f"skipped short audio clip: {idx0}_{idx1}.wav ({len(tmp_audio)=})")
 
     def pipeline(self, path, idx0):
         try:
-            audio,_ = load_input_audio(path, self.sr)
+            input_audio = load_input_audio(path, self.sr)
+            if self.preprocessor is not None: input_audio = self.preprocessor(input_audio)
 
             idx1 = 0
-            for audio in self.slicer.slice(audio):
+            for audio in self.slicer.slice(input_audio[0]):
                 i = 0
                 while 1:
                     start = int(self.sr * (self.per - self.overlap) * i)
@@ -188,18 +192,20 @@ class FeatureInput(FeatureExtractor):
                 except:
                     self.printt("f0fail-%s-%s-%s" % (idx, inp_path, traceback.format_exc()))
 
-def preprocess_trainset(inp_root, sr, n_p, exp_dir, period=3.0, overlap=.3, max_volume=1.):
+def preprocess_trainset(inp_root, sr, n_p, exp_dir, preprocessor=None, period=3.0, overlap=.3, max_volume=1.):
     try:
-        pp = Preprocess(sr, exp_dir, period=period, overlap=overlap, max_volume=max_volume)
+        pp = Preprocess(sr, exp_dir, preprocessor=preprocessor, period=period, overlap=overlap, max_volume=max_volume)
         pp.println("start preprocess")
         pp.println(sys.argv)
         pp.pipeline_mp_inp_dir(inp_root, n_p)
         pp.println("end preprocess")
         del pp
         gc_collect()
-        return "Successfully preprocessed data"
+        print("Successfully preprocessed data")
+        return True
     except Exception as e:
-        return f"Failed to preprocess data: {e}"
+        print(f"Failed to preprocess data: {e}")
+        return False
 
 def extract_features_trainset(hubert_model,exp_dir,n_p,f0method,device,version,if_f0,crepe_hop_length):
     try:
@@ -240,7 +246,8 @@ def extract_features_trainset(hubert_model,exp_dir,n_p,f0method,device,version,i
                     p.join()
                 except:
                     featureInput.printt("f0_all_fail-%s" % (traceback.format_exc()))
-
-        return f"Successfully extracted features using {f0method}"
+        print(f"Successfully extracted features using {f0method}")
+        return True
     except Exception as e:
-        return f"Failed to extract features: {e}"
+        print(f"Failed to extract features: {e}")
+        return False

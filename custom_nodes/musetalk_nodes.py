@@ -6,10 +6,9 @@ import cv2
 import copy
 from tqdm import tqdm
 
-from ..lib.audio import remix_audio
+from ..lib.audio import get_audio, remix_audio
 from ..lib import BASE_CACHE_DIR
 from ..lib.utils import gc_collect, get_hash, get_optimal_torch_device
-from .audio_nodes import get_audio
 from .utils import MultipleTypeProxy, model_downloader
 from ..lib.musetalk.models.unet import PositionalEncoding, UNet
 from ..lib.musetalk.models.vae import VAE

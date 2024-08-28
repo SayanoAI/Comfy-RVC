@@ -14,7 +14,6 @@ from ..training_cli import train_model
 
 from ..preprocessing_utils import extract_features_trainset, preprocess_trainset
 
-from .audio_nodes import get_audio
 from ..config import config
 
 from ..lib.model_utils import load_hubert
@@ -23,7 +22,7 @@ from .utils import MultipleTypeProxy, increment_filename_no_overwrite, model_dow
 from .settings import PITCH_EXTRACTION_OPTIONS, SR_MAP
 from .settings.downloader import PRETRAINED_MODELS, RVC_DOWNLOAD_LINK, RVC_INDEX, RVC_MODELS, download_file, extract_zip_without_structure
 
-from ..lib.audio import SUPPORTED_AUDIO, audio_to_bytes, load_input_audio, save_input_audio
+from ..lib.audio import SUPPORTED_AUDIO, audio_to_bytes, load_input_audio, save_input_audio, get_audio
 
 from ..vc_infer_pipeline import get_vc, vc_single
 import folder_paths
@@ -237,6 +236,7 @@ class RVCProcessDatasetNode:
                 "overlap": ("FLOAT",{"default": .3, "min": .1, "max": 1., "step": .1}),
                 "max_volume": ("FLOAT",{"default": .99, "min": .1, "max": 1., "step": .01}),
                 "mute_ratio": ("FLOAT",{"default": .0, "min": .0, "max": .5, "step": .01}),
+                "audio_processor": ("AUDIO_PROCESSOR",)
             }
         }
 
@@ -247,13 +247,13 @@ class RVCProcessDatasetNode:
 
     CATEGORY = CATEGORY
 
-    def process(self, model_name: str, dataset: str, hubert_model, pitch_extraction_params={}, sr="40k", n_threads=1, period=3., overlap=.3, max_volume=1., mute_ratio=.0):
+    def process(self, model_name: str, dataset: str, hubert_model, pitch_extraction_params={}, sr="40k", n_threads=1, period=3., overlap=.3, max_volume=1., mute_ratio=.0, audio_processor=None):
         
         assert model_name, "Please provide a model name!"
         assert dataset, "Please upload a dataset!"
         
         f0_method = pitch_extraction_params.get("f0_method", "")
-        cached_params = [model_name, dataset, period, overlap, max_volume, mute_ratio, sr, f0_method]
+        cached_params = [model_name, dataset, period, overlap, max_volume, mute_ratio, sr, f0_method, audio_processor]
         crepe_hop_length = pitch_extraction_params.get("crepe_hop_length",160)
 
         if "crepe" in f0_method: cached_params.append(crepe_hop_length)
@@ -271,9 +271,9 @@ class RVCProcessDatasetNode:
                 files = extract_zip_without_structure(os.path.join(dataset_path,dataset),dataset_dir)
                 assert len(files), "Failed to extract zip file..."
             
-            print(preprocess_trainset(dataset_dir,SR_MAP[sr],n_threads,model_log_dir,period,overlap,max_volume))
+            assert preprocess_trainset(dataset_dir,SR_MAP[sr],n_threads,model_log_dir,audio_processor,period,overlap,max_volume), "Failed to preprocess audio..."
             
-            print(extract_features_trainset(hubert_model(), model_log_dir,n_p=n_threads,f0method=f0_method,device=device,if_f0=bool(f0_method),version="v2",crepe_hop_length=crepe_hop_length))
+            assert extract_features_trainset(hubert_model(), model_log_dir,n_p=n_threads,f0method=f0_method,device=device,if_f0=bool(f0_method),version="v2",crepe_hop_length=crepe_hop_length), "Failed to extract features..."
 
             gt_wavs_dir = os.path.join(model_log_dir,"0_gt_wavs")
             feature_dir = os.path.join(model_log_dir,"3_feature768")
@@ -377,7 +377,7 @@ class RVCTrainModelNode:
             },
             "optional": dict(
                 gpu=(DEVICES, {"default": DEVICES[0]}),
-                batch_size=("INT",dict(default=4,min=1,max=64)),
+                batch_size=("INT",dict(default=4,min=0,max=64,step=4)),
                 total_epoch=("INT",dict(default=100,min=10,max=1000,step=10)),
                 save_every_epoch=("INT",dict(default=0,min=0,max=100)),
                 pretrained_G=(PRETRAINED_G,{"default": PRETRAINED_G[0]}),
@@ -433,7 +433,7 @@ class RVCTrainModelNode:
         hparams.pretrainD = model_downloader(pretrained_D)
         hparams.version = "v2"
         hparams.gpus = gpu
-        hparams.train.batch_size = batch_size
+        hparams.train.batch_size = max(batch_size,1)
         hparams.sample_rate = sample_rate
         hparams.if_f0 = if_f0
         hparams.if_latest = if_save_latest
@@ -443,7 +443,7 @@ class RVCTrainModelNode:
         hparams.save_best_model = save_best_model
 
         file_index = self.train_index(model_dir, sample_rate, name) if train_index else None
-        model_path = os.path.join(BASE_MODELS_DIR,"RVC",f"{name}.pth")
+        model_path = os.path.join(BASE_MODELS_DIR,"RVC",f"{name}_{sample_rate}.pth")
         if os.path.isfile(model_path) and retrain: model_path = increment_filename_no_overwrite(model_path)
         hparams.model_path = model_path
 
