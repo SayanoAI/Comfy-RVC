@@ -387,7 +387,8 @@ class RVCTrainModelNode:
                 if_save_every_weights=("BOOLEAN",{"default":False}),
                 train_index=("BOOLEAN",{"default": True}),
                 retrain=("BOOLEAN",{"default": False}),
-                save_best_model=("BOOLEAN",{"default": True})
+                save_best_model=("BOOLEAN",{"default": True}),
+                log_every_epoch=("FLOAT",dict(default=1.,min=0.,max=2.,step=.5))
             )
         }
 
@@ -413,7 +414,8 @@ class RVCTrainModelNode:
                     if_save_every_weights=False,
                     train_index=True,
                     retrain=False,
-                    save_best_model=True):
+                    save_best_model=True,
+                    log_every_epoch=1.):
         
         sample_rate = rvc_dataset_pipe["sample_rate"]
         name = rvc_dataset_pipe["name"]
@@ -441,6 +443,7 @@ class RVCTrainModelNode:
         hparams.if_cache_data_in_gpu = if_cache_gpu
         hparams.data.training_files = rvc_dataset_pipe["training_files"]
         hparams.save_best_model = save_best_model
+        hparams.log_every_epoch = log_every_epoch
 
         file_index = self.train_index(model_dir, sample_rate, name) if train_index else None
         model_path = os.path.join(BASE_MODELS_DIR,"RVC",f"{name}_{sample_rate}.pth")
@@ -448,6 +451,7 @@ class RVCTrainModelNode:
         hparams.model_path = model_path
 
         if not os.path.isfile(model_path): train_model(hparams)
+        assert os.path.isfile(model_path), f"Failed to train model {model_path}..."
 
         return (lambda: get_vc(model_path, file_index), name, rvc_dataset_pipe["hubert_model"], rvc_dataset_pipe["pitch_extraction_params"])
 

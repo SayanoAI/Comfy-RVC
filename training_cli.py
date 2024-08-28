@@ -158,7 +158,7 @@ def run(rank, n_gpus, hps, device):
     if torch.cuda.is_available():
         torch.cuda.set_device(f"cuda:{device}")
 
-    if hps.if_f0 == 1:
+    if hps.if_f0:
         train_dataset = TextAudioLoaderMultiNSFsid(hps.data.training_files, hps.data)
     else:
         train_dataset = TextAudioLoader(hps.data.training_files, hps.data)
@@ -175,7 +175,7 @@ def run(rank, n_gpus, hps, device):
     
     # It is possible that dataloader's workers are out of shared memory. Please try to raise your shared memory limit.
     # num_workers=8 -> num_workers=4
-    if hps.if_f0 == 1:
+    if hps.if_f0:
         collate_fn = TextAudioCollateMultiNSFsid()
     else:
         collate_fn = TextAudioCollate()
@@ -189,8 +189,9 @@ def run(rank, n_gpus, hps, device):
         persistent_workers=True,
         prefetch_factor=8,
     )
+    hps.sync_log_interval(len(train_loader))
     
-    if hps.if_f0 == 1:
+    if hps.if_f0:
         net_g = RVC_Model_f0(
             hps.data.filter_length // 2 + 1,
             hps.train.segment_size // hps.data.hop_length,
@@ -506,7 +507,22 @@ def train_and_evaluate(
         scaler.update()
 
         if rank == 0:
-            if global_step % hps.train.log_interval == 0:
+            if loss_gen_all<least_loss:
+                least_loss = loss_gen_all
+                
+                if hps.save_best_model and epoch>min(hps.total_epoch*.2,20): #start saving after 20% or 20 epochs
+                    if hasattr(net_g, "module"):
+                        ckpt = net_g.module.state_dict()
+                    else:
+                        ckpt = net_g.state_dict()
+                    best_model_name = f"{hps.name}_e{epoch}_s{global_step}_loss{loss_gen_all:2.2f}"
+                    status = save_checkpoint(ckpt,best_model_name,epoch,hps)
+                    with open(loss_file,"w") as f:
+                        json.dump(dict(least_loss=least_loss.item(),best_model=os.path.join(hps.model_dir,best_model_name+".pth")),f)
+                    logger.info(f"=== saving best model: epoch {hps.name}_e{epoch}_{loss_gen_all:2.2f}: {status=} ===")
+                logger.info(f"[lowest loss] loss_disc={loss_disc:.3f}, loss_gen={loss_gen:.3f}, loss_fm={loss_fm:.3f},loss_mel={loss_mel:.3f}, loss_kl={loss_kl:.3f}")
+
+            if hps.train.log_interval>0 and global_step % hps.train.log_interval == 0:
                 lr = optim_g.param_groups[0]["lr"]
                 logger.info(
                     "Train Epoch: {} [{:.0f}%]".format(epoch, 100.0 * batch_idx / len(train_loader))
@@ -522,36 +538,18 @@ def train_and_evaluate(
                 logger.info(
                     f"loss_disc={loss_disc:.3f}, loss_gen={loss_gen:.3f}, loss_fm={loss_fm:.3f},loss_mel={loss_mel:.3f}, loss_kl={loss_kl:.3f}"
                 )
-                if loss_gen_all<least_loss:
-                    least_loss = loss_gen_all
-                    
-                    if hasattr(net_g, "module"):
-                        ckpt = net_g.module.state_dict()
-                    else:
-                        ckpt = net_g.state_dict()
-                    
-                    if hps.save_best_model:
-                        best_model_name = f"{hps.name}_e{epoch}_loss{loss_gen_all:2.2f}"
-                        status = save_checkpoint(ckpt,best_model_name,epoch,hps)
-                        with open(loss_file,"w") as f:
-                            json.dump(dict(least_loss=least_loss.item(),best_model=os.path.join(hps.model_dir,best_model_name+".pth")),f)
-                        logger.info(f"=== saving best model: epoch {hps.name}_e{epoch}_{loss_gen_all:2.2f}: {status=} ===")
-                    logger.info(f"[lowest loss] loss_disc={loss_disc:.3f}, loss_gen={loss_gen:.3f}, loss_fm={loss_fm:.3f},loss_mel={loss_mel:.3f}, loss_kl={loss_kl:.3f}")
                     
                 scalar_dict = {
-                    "loss/g/total": loss_gen_all,
-                    "loss/d/total": loss_disc,
+                    "total/loss/all": loss_gen_all,
+                    "total/loss/g": loss_gen,
+                    "total/loss/d": loss_disc,
+                    "total/loss/fm": loss_fm,
+                    "total/loss/mel": loss_mel,
+                    "total/loss/kl": loss_kl,
                     "learning_rate": lr,
                     "grad_norm_d": grad_norm_d,
                     "grad_norm_g": grad_norm_g,
                 }
-                scalar_dict.update(
-                    {
-                        "loss/g/fm": loss_fm,
-                        "loss/g/mel": loss_mel,
-                        "loss/g/kl": loss_kl,
-                    }
-                )
 
                 scalar_dict.update(
                     {"loss/g/{}".format(i): v for i, v in enumerate(losses_gen)}
@@ -590,14 +588,14 @@ def train_and_evaluate(
                 optim_g,
                 hps.train.learning_rate,
                 epoch,
-                os.path.join(hps.model_dir, f"G_{hps.total_epoch}00000.pth"),
+                os.path.join(hps.model_dir, f"G_23333{hps.total_epoch}.pth"),
             )
             utils.save_checkpoint(
                 net_d,
                 optim_d,
                 hps.train.learning_rate,
                 epoch,
-                os.path.join(hps.model_dir, f"D_{hps.total_epoch}00000.pth"),
+                os.path.join(hps.model_dir, f"D_23333{hps.total_epoch}.pth"),
             )
         else:
             utils.save_checkpoint(
@@ -636,7 +634,7 @@ def train_and_evaluate(
                 data = json.load(f)
                 best_model = data["best_model"]
                 if os.path.isfile(best_model):
-                    shutil.copy(best_model,os.path.join(os.path.dirname(hps.model_path),f"{hps.name}-best.pth"))
+                    shutil.copy(best_model,os.path.join(os.path.dirname(hps.model_path),f"{hps.name}_{hps.sample_rate}-best.pth"))
 
         status = save_checkpoint(ckpt,hps.name,epoch,hps,model_path=hps.model_path)
         logger.info(f"saving final ckpt: {status}")

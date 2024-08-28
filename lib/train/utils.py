@@ -475,3 +475,7 @@ class HParams:
 
     def __repr__(self):
         return self.__dict__.__repr__()
+    
+    def sync_log_interval(self, dataset_length):
+        log_interval = getattr(self,"log_every_epoch",1)
+        self.train.log_interval = int(self.train.batch_size*dataset_length*log_interval)
