@@ -384,7 +384,7 @@ def get_hparams(init=True):
     hparams.save_best_model = True
     hparams.train.gradient_lambda = 0.
     hparams.train.num_workers = 4
-    hparams.train.timbre_alpha = 0.
+    hparams.train.timbre_lambda = 0.
     hparams.model_path = None
     return hparams
 

@@ -1,11 +1,37 @@
 import torch
+import torchaudio
 
+def mfcc_loss(original_audio, generated_audio, sample_rate, n_mfcc=13, **kwargs):
+    """
+    Computes the loss between the original and generated audio based on MFCCs.
+    
+    Parameters:
+    original_audio (Tensor): The original audio waveform.
+    generated_audio (Tensor): The generated audio waveform.
+    sample_rate (int): The sample rate of the audio.
+    n_mfcc (int): Number of MFCC coefficients to compute (default is 13).
+    
+    Returns:
+    Tensor: The computed MFCC loss.
+    """
+    
+    mfcc_transform = torchaudio.transforms.MFCC(sample_rate=sample_rate,n_mfcc=n_mfcc,melkwargs=kwargs)
+    mfcc_transform.to(original_audio.device)
+
+    # Compute MFCCs for original and generated audio
+    original_mfcc = mfcc_transform(original_audio)
+    generated_mfcc = mfcc_transform(generated_audio)
+    
+    # Compute the L2 loss between the MFCCs of the original and generated audio
+    loss = torch.nn.functional.smooth_l1_loss(generated_mfcc, original_mfcc)
+    
+    return loss
 
 def feature_loss(fmap_r, fmap_g):
     loss = 0
     for dr, dg in zip(fmap_r, fmap_g):
         for rl, gl in zip(dr, dg):
-            rl = rl.float().detach()
+            rl = rl.float()
             gl = gl.float()
             loss += torch.mean(torch.abs(rl - gl))
 

@@ -3,6 +3,8 @@ import json
 import os
 import shutil
 import traceback
+
+from tqdm import tqdm
 from .lib.audio import SR_MAP
 from .lib.train import utils
 import datetime
@@ -27,7 +29,7 @@ from .lib.train.data_utils import (
     TextAudioCollate,
     DistributedBucketSampler,
 )
-from .lib.train.losses import generator_loss, discriminator_loss, feature_loss, kl_loss
+from .lib.train.losses import generator_loss, discriminator_loss, feature_loss, kl_loss, mfcc_loss
 from .lib.train.mel_processing import mel_spectrogram_torch, spec_to_mel_torch
 
 def save_checkpoint(ckpt, name, epoch, hps, model_path=None):
@@ -84,7 +86,7 @@ def train_model(hps: "utils.HParams"):
     os.environ["CUDA_VISIBLE_DEVICES"] = hps.gpus.replace("-", ",")
     os.environ["NCCL_P2P_DISABLE"] = "1"
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = str(randint(8189, 8200))
+    os.environ["MASTER_PORT"] = str(randint(8189, 8205+hps.train.num_workers**2))
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128,garbage_collection_threshold:0.8"
 
     n_gpus = len(hps.gpus.split("-")) if hps.gpus else torch.cuda.device_count()
@@ -125,10 +127,10 @@ def run(rank, n_gpus, hps, device):
     if os.path.isfile(loss_file):
         with open(loss_file,"r") as f:
             data: dict = json.load(f)
-            least_loss = data.get("least_loss",40)
+            least_loss = data.get("least_loss",50)
             best_model_name = data.get("best_model_name","")
     else:
-        least_loss = 40
+        least_loss = 50
         best_model_name = ""
 
     if hps.version == "v1":
@@ -180,7 +182,7 @@ def run(rank, n_gpus, hps, device):
         collate_fn = TextAudioCollate()
     train_loader = DataLoader(
         train_dataset,
-        num_workers=4,
+        num_workers=hps.train.num_workers,
         shuffle=False,
         pin_memory=True,
         collate_fn=collate_fn,
@@ -318,7 +320,7 @@ def train_and_evaluate(
     net_d.train()
 
     # Prepare data iterator
-    if hps.if_cache_data_in_gpu == True:
+    if hps.if_cache_data_in_gpu:
         # Use Cache
         data_iterator = cache
         if cache == []:
@@ -401,7 +403,7 @@ def train_and_evaluate(
 
     # Run steps
     epoch_recorder = EpochRecorder()
-    for batch_idx, info in data_iterator:
+    for batch_idx, info in tqdm(data_iterator,desc=f"[Epoch {epoch}]: "):
         # Data
         ## Unpack
         if hps.if_f0 == 1:
@@ -419,7 +421,7 @@ def train_and_evaluate(
         else:
             phone, phone_lengths, spec, spec_lengths, wave, wave_lengths, sid = info
         ## Load on CUDA
-        if (hps.if_cache_data_in_gpu == False) and torch.cuda.is_available():
+        if (not hps.if_cache_data_in_gpu) and torch.cuda.is_available():
             phone = phone.cuda(rank, non_blocking=True)
             phone_lengths = phone_lengths.cuda(rank, non_blocking=True)
             if hps.if_f0 == 1:
@@ -429,7 +431,6 @@ def train_and_evaluate(
             spec = spec.cuda(rank, non_blocking=True)
             spec_lengths = spec_lengths.cuda(rank, non_blocking=True)
             wave = wave.cuda(rank, non_blocking=True)
-            # wave_lengths = wave_lengths.cuda(rank, non_blocking=True)
 
         # Calculate
         with autocast(enabled=hps.train.fp16_run):
@@ -471,105 +472,116 @@ def train_and_evaluate(
                     hps.data.mel_fmin,
                     hps.data.mel_fmax,
                 )
-            if hps.train.fp16_run == True:
-                y_hat_mel = y_hat_mel.half()
-            wave = commons.slice_segments(
-                wave, ids_slice * hps.data.hop_length, hps.train.segment_size
-            )  # slice
+            if hps.train.fp16_run: y_hat_mel = y_hat_mel.half()
+            wave = commons.slice_segments(wave, ids_slice * hps.data.hop_length, hps.train.segment_size)  # slice
 
             # Discriminator
             gen_wave = y_hat.detach()
             y_d_hat_r, y_d_hat_g, _, _ = net_d(wave, gen_wave)
             
-            gradient_penalty = torch.Tensor([0.]).to(wave.device)
-            if hps.train.get("gradient_lambda",0.)>0:
-                # Compute the gradient penalty
-                # Randomly interpolate between real and generated data
-                size = [1]*wave.ndim
-                size[0] = wave.size(0)
-                alpha = torch.rand(*size, device=wave.device)
-                interpolated = alpha * wave + (1 - alpha) * gen_wave
-                interpolated.requires_grad_(True)
-                # Get the discriminator output for the interpolated data
-                _, disc_interpolated_output, _, _ = net_d(wave, interpolated)
-                # Compute gradients of discriminator output w.r.t. interpolated data
-                for output in disc_interpolated_output:
-                    gradient = torch.autograd.grad(
-                        outputs=output,
-                        inputs=interpolated,
-                        grad_outputs=torch.ones(output.size(), device=wave.device),
-                        create_graph=True,
-                        only_inputs=True
-                    )[0]
-                    gradient = gradient.view(gradient.size(0), -1)
-                    gradient_penalty += ((gradient.norm(2,dim=-1) - 1) ** 2).mean()
-            gradient_penalty = gradient_penalty.squeeze()
-
             with autocast(enabled=False):
-                loss_disc, losses_disc_r, losses_disc_g = discriminator_loss(
-                    y_d_hat_r, y_d_hat_g
-                )
-                if hps.train.get("gradient_lambda",0.)>0: gradient_penalty*=hps.train.gradient_lambda
+                gradient_penalty = torch.Tensor([0.]).to(wave.device)
+                if hps.train.get("gradient_lambda",0.)>0:
+                    # Compute the gradient penalty
+                    # Randomly interpolate between real and generated data
+                    size = [1]*wave.ndim
+                    size[0] = wave.size(0)
+                    alpha = torch.rand(*size, device=wave.device)
+                    interpolated = alpha * wave + (1 - alpha) * gen_wave
+                    interpolated.requires_grad_(True)
+                    # Get the discriminator output for the interpolated data
+                    _, disc_interpolated_output, _, _ = net_d(wave, interpolated)
+                    # Compute gradients of discriminator output w.r.t. interpolated data
+                    for output in disc_interpolated_output:
+                        gradient = torch.autograd.grad(
+                            outputs=output,
+                            inputs=interpolated,
+                            grad_outputs=torch.ones(output.size(), device=wave.device),
+                            create_graph=True,
+                            only_inputs=True
+                        )[0]
+                        gradient = gradient.view(gradient.size(0), -1)
+                        gradient_penalty += torch.log(gradient.norm(2,dim=-1)).abs().mean() # force gradnorm=1
+                    gradient_penalty *= hps.train.gradient_lambda/len(disc_interpolated_output)
 
-        optim_d.zero_grad()
-        scaler.scale(loss_disc+gradient_penalty).backward()
-        scaler.unscale_(optim_d)
-        grad_norm_d = commons.clip_grad_value_(net_d.parameters(), None)
-        scaler.step(optim_d)
+                loss_mfcc =  torch.Tensor([0.]).to(wave.device)
+                if hps.train.get("timbre_lambda",0)>0:
+                    loss_mfcc = mfcc_loss(wave, gen_wave, SR_MAP[hps.sample_rate],
+                                            n_fft=hps.data.filter_length,
+                                            hop_length=hps.data.hop_length,
+                                            win_length=hps.data.win_length,
+                                            n_mels=hps.data.n_mel_channels,
+                                            norm="slaney",
+                                            f_min=hps.data.mel_fmin,
+                                            f_max=hps.data.mel_fmax
+                                            ) * hps.train.timbre_lambda
+                
+                loss_mfcc = loss_mfcc.squeeze()
+                gradient_penalty = gradient_penalty.squeeze()
+                loss_disc, losses_disc_r, losses_disc_g = discriminator_loss(y_d_hat_r, y_d_hat_g)
+                loss_disc_all = loss_disc+gradient_penalty+loss_mfcc
+
+            optim_d.zero_grad()
+            scaler.scale(loss_disc_all).backward()
+            scaler.unscale_(optim_d)
+            grad_norm_d = commons.clip_grad_value_(net_d.parameters(), None)
+            scaler.step(optim_d)
 
         with autocast(enabled=hps.train.fp16_run):
             # Generator
             y_d_hat_r, y_d_hat_g, fmap_r, fmap_g = net_d(wave, y_hat)
             with autocast(enabled=False):
-                loss_mel = F.l1_loss(y_mel, y_hat_mel) * hps.train.c_mel
+                loss_mel = F.smooth_l1_loss(y_mel, y_hat_mel) * hps.train.c_mel
                 loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask) * hps.train.c_kl
                 loss_fm = feature_loss(fmap_r, fmap_g)
                 loss_gen, losses_gen = generator_loss(y_d_hat_g)
                 loss_gen_all = loss_gen + loss_fm + loss_mel + loss_kl
-        optim_g.zero_grad()
-        scaler.scale(loss_gen_all).backward()
-        scaler.unscale_(optim_g)
-        grad_norm_g = commons.clip_grad_value_(net_g.parameters(), None)
-        scaler.step(optim_g)
-        scaler.update()
-
+                
+            optim_g.zero_grad()
+            scaler.scale(loss_gen_all).backward()
+            scaler.unscale_(optim_g)
+            grad_norm_g = commons.clip_grad_value_(net_g.parameters(), None)
+            scaler.step(optim_g)
+            scaler.update()
+        
         if rank == 0:
-            if epoch>=max(hps.total_epoch*.2,20): #start saving best model after 20% or 20 epochs
-                if loss_gen_all+loss_disc<least_loss:
-                    least_loss = loss_gen_all+loss_disc
-                    logger.info(f"[lowest loss] {least_loss=:.3f}: {loss_disc=:.3f}, {loss_gen=:.3f}, {loss_fm=:.3f}, {loss_mel=:.3f}, {loss_kl=:.3f}")
+            # if epoch>=max(hps.total_epoch*.2,20): #start saving best model after 20% or 20 epochs
+            if loss_gen_all+loss_disc_all<least_loss:
+                least_loss = loss_gen_all+loss_disc_all
+                logger.info(f"[lowest loss] {least_loss=:.3f}: {loss_disc=:.3f} {loss_mfcc=:.3f} {gradient_penalty=:.3f}, {loss_gen=:.3f}, {loss_fm=:.3f}, {loss_mel=:.3f}, {loss_kl=:.3f}")
 
-                    if hps.save_best_model:
-                        if hasattr(net_g, "module"):
-                            ckpt = net_g.module.state_dict()
-                        else:
-                            ckpt = net_g.state_dict()
-                        best_model_name = f"{hps.name}_e{epoch}_s{global_step}_loss{least_loss:2.2f}"
-                        status = save_checkpoint(ckpt,best_model_name,epoch,hps)
-                        logger.info(f"=== saving best model {best_model_name}: {status=} ===")
+                if hps.save_best_model:
+                    if hasattr(net_g, "module"):
+                        ckpt = net_g.module.state_dict()
+                    else:
+                        ckpt = net_g.state_dict()
                     
-                    with open(loss_file,"w") as f:
-                        json.dump(dict(least_loss=least_loss.item(),best_model_name=best_model_name),f)
+                    best_model_name = f"{hps.name}_loss{least_loss:2.0f}" if hps.if_save_latest else f"{hps.name}_e{epoch}_s{global_step}_loss{least_loss:2.0f}"
+                    status = save_checkpoint(ckpt,best_model_name,epoch,hps)
+                    logger.info(f"=== saving best model {best_model_name}: {status=} ===")
+                
+                with open(loss_file,"w") as f:
+                    json.dump(dict(least_loss=least_loss.item(),best_model_name=best_model_name),f)
 
             if hps.train.log_interval>0 and global_step % hps.train.log_interval == 0:
                 lr = optim_g.param_groups[0]["lr"]
-                logger.info(f"Train Epoch: {epoch} [{100.0 * batch_idx / len(train_loader):.0f}%]")
+                logger.info(f"Train Epoch: {epoch} [{100.0 * epoch / hps.total_epoch:.2f}% complete]")
                 # Amor For Tensorboard display
                 if loss_mel > 75:
                     loss_mel = 75
                 if loss_kl > 9:
                     loss_kl = 9
-
-                logger.info(f"{epoch=} {global_step=} {lr=:.2E} {loss_disc=:.3f} {gradient_penalty.item()=:.2E}")
-                logger.info(f"{loss_gen_all=:.3f}: {loss_gen=:.3f}, {loss_fm=:.3f}, {loss_mel=:.3f}, {loss_kl=:.3f}")
                 
                 scalar_dict = {
-                    "total/loss/all": loss_gen_all,
-                    "total/loss/g": loss_gen,
-                    "total/loss/d": loss_disc,
+                    "total/loss/all": loss_gen_all+loss_disc_all,
+                    "total/loss/gen_all": loss_gen_all,
+                    "total/loss/disc_all": loss_disc_all,
+                    "total/loss/gen": loss_gen,
+                    "total/loss/disc": loss_disc,
                     "total/loss/fm": loss_fm,
                     "total/loss/mel": loss_mel,
                     "total/loss/kl": loss_kl,
+                    "total/loss/mfcc": loss_mfcc,
                     "learning_rate": lr,
                     "gradient/grad_norm_d": grad_norm_d,
                     "gradient/grad_norm_g": grad_norm_g,
@@ -602,53 +614,36 @@ def train_and_evaluate(
 
     if hps.save_every_epoch>0 and (epoch % hps.save_every_epoch == 0) and rank == 0:
             
-        if hps.if_latest:
-            utils.save_checkpoint(
-                net_g,
-                optim_g,
-                hps.train.learning_rate,
-                epoch,
-                os.path.join(hps.model_dir, "G_23333.pth"),
-            )
-            utils.save_checkpoint(
-                net_d,
-                optim_d,
-                hps.train.learning_rate,
-                epoch,
-                os.path.join(hps.model_dir, "D_23333.pth"),
-            )
-        else:
-            utils.save_checkpoint(
-                net_g,
-                optim_g,
-                hps.train.learning_rate,
-                epoch,
-                os.path.join(hps.model_dir, f"G_{epoch}.pth"),
-            )
-            utils.save_checkpoint(
-                net_d,
-                optim_d,
-                hps.train.learning_rate,
-                epoch,
-                os.path.join(hps.model_dir, f"D_{epoch}.pth"),
-            )
-        if rank == 0 and hps.save_every_weights:
-            if hasattr(net_g, "module"):
-                ckpt = net_g.module.state_dict()
-            else:
-                ckpt = net_g.state_dict()
-            status = save_checkpoint(ckpt,f"{hps.name}_e{epoch}_s{global_step}",epoch,hps)
-            logger.info(f"saving ckpt {hps.name}_e{epoch}: {status}")
+        saved_epoch = 23333 if hps.if_latest else epoch
+        utils.save_checkpoint(
+            net_g,
+            optim_g,
+            hps.train.learning_rate,
+            epoch,
+            os.path.join(hps.model_dir, f"G_{saved_epoch}.pth"),
+        )
+        utils.save_checkpoint(
+            net_d,
+            optim_d,
+            hps.train.learning_rate,
+            epoch,
+            os.path.join(hps.model_dir, f"D_{saved_epoch}.pth"),
+        )
+        if hps.save_every_weights:
+            ckpt = net_g.module.state_dict() if hasattr(net_g, "module") else net_g.state_dict()
+            save_name = f"{hps.name}_e{epoch}_s{global_step}"
+            status = save_checkpoint(ckpt,save_name,epoch,hps)
+            logger.info(f"saving ckpt {save_name}: {status}")
 
     if rank == 0:
-        logger.info(f"====> Epoch {epoch}: {loss_gen_all=:.3f} {loss_disc=:.3f} {epoch_recorder.record()}")
+        logger.info(f"====> Epoch {epoch} (Total Loss={(loss_disc_all+loss_gen_all).item():.3f}): {global_step=} {lr=:.2E} {epoch_recorder.record()}")
+        logger.info(f"|| {loss_disc_all=:.3f}: {loss_disc=:.3f}, {loss_mfcc=:.3f}, {gradient_penalty=:.3f}")
+        logger.info(f"|| {loss_gen_all=:.3f}: {loss_gen=:.3f}, {loss_fm=:.3f}, {loss_mel=:.3f}, {loss_kl=:.3f}")
+
     if epoch >= hps.total_epoch and rank == 0:
         logger.info("Training is done. The program is closed.")
 
-        if hasattr(net_g, "module"):
-            ckpt = net_g.module.state_dict()
-        else:
-            ckpt = net_g.state_dict()
+        ckpt = net_g.module.state_dict() if hasattr(net_g, "module") else net_g.state_dict()
         if hps.save_best_model:
             with open(loss_file,"r") as f:
                 data = json.load(f)
