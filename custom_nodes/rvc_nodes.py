@@ -19,10 +19,10 @@ from ..config import config
 from ..lib.model_utils import load_hubert
 
 from .utils import MultipleTypeProxy, increment_filename_no_overwrite, model_downloader
-from .settings import PITCH_EXTRACTION_OPTIONS, SR_MAP
+from .settings import PITCH_EXTRACTION_OPTIONS
 from .settings.downloader import PRETRAINED_MODELS, RVC_DOWNLOAD_LINK, RVC_INDEX, RVC_MODELS, download_file, extract_zip_without_structure
 
-from ..lib.audio import SUPPORTED_AUDIO, audio_to_bytes, load_input_audio, save_input_audio, get_audio
+from ..lib.audio import SUPPORTED_AUDIO, audio_to_bytes, load_input_audio, save_input_audio, get_audio, SR_MAP
 
 from ..vc_infer_pipeline import get_vc, vc_single
 import folder_paths
@@ -38,7 +38,7 @@ weights_path = os.path.join(BASE_MODELS_DIR, "uvr5")
 dataset_path = os.path.join(input_path,"datasets")
 device = get_optimal_torch_device()
 CATEGORY = "🌺RVC-Studio/rvc"
-LOG_DIR = os.path.join(BASE_DIR,"logs")
+MUTE_DIR = os.path.join(BASE_DIR,"dataset")
 
 class LoadPitchExtractionParams:
     @classmethod
@@ -259,31 +259,31 @@ class RVCProcessDatasetNode:
         if "crepe" in f0_method: cached_params.append(crepe_hop_length)
         
         cache_name = get_hash(*cached_params)
-        model_log_dir = os.path.join(output_path,"logs",cache_name)
-        os.makedirs(model_log_dir,exist_ok=True)
+        dataset_dir = os.path.join(output_path,"dataset",cache_name)
+        os.makedirs(dataset_dir,exist_ok=True)
 
-        filelist_path = os.path.join(model_log_dir, "filelist.txt")
+        filelist_path = os.path.join(dataset_dir, "filelist.txt")
         
         if not os.path.isfile(filelist_path):
-            dataset_dir = os.path.join(input_path,"datasets",dataset.split(".")[0])
+            input_dir = os.path.join(dataset_path,dataset.split(".")[0])
 
             if dataset.endswith("zip"):
-                files = extract_zip_without_structure(os.path.join(dataset_path,dataset),dataset_dir)
+                files = extract_zip_without_structure(os.path.join(dataset_path,dataset),input_dir)
                 assert len(files), "Failed to extract zip file..."
             
-            assert preprocess_trainset(dataset_dir,SR_MAP[sr],n_threads,model_log_dir,audio_processor,period,overlap,max_volume), "Failed to preprocess audio..."
+            assert preprocess_trainset(input_dir,SR_MAP[sr],n_threads,dataset_dir,audio_processor,period,overlap,max_volume), "Failed to preprocess audio..."
             
-            assert extract_features_trainset(hubert_model(), model_log_dir,n_p=n_threads,f0method=f0_method,device=device,if_f0=bool(f0_method),version="v2",crepe_hop_length=crepe_hop_length), "Failed to extract features..."
+            assert extract_features_trainset(hubert_model(), dataset_dir,n_p=n_threads,f0method=f0_method,device=device,if_f0=bool(f0_method),version="v2",crepe_hop_length=crepe_hop_length), "Failed to extract features..."
 
-            gt_wavs_dir = os.path.join(model_log_dir,"0_gt_wavs")
-            feature_dir = os.path.join(model_log_dir,"3_feature768")
+            gt_wavs_dir = os.path.join(dataset_dir,"0_gt_wavs")
+            feature_dir = os.path.join(dataset_dir,"3_feature768")
             os.makedirs(gt_wavs_dir, exist_ok=True)
             os.makedirs(feature_dir, exist_ok=True)
             
             # add training data 
             if f0_method:
-                f0_dir =  os.path.join(model_log_dir,"2a_f0")
-                f0nsf_dir = os.path.join(model_log_dir,"2b-f0nsf")
+                f0_dir =  os.path.join(dataset_dir,"2a_f0")
+                f0nsf_dir = os.path.join(dataset_dir,"2b-f0nsf")
                 names = (
                     set([os.path.splitext(name)[0] for name in os.listdir(feature_dir)])
                     & set([os.path.splitext(name)[0] for name in os.listdir(f0_dir)])
@@ -328,16 +328,16 @@ class RVCProcessDatasetNode:
             for _ in range(num_mute):
                 if f0_method:
                     data = "|".join([
-                        os.path.join(LOG_DIR,"mute","0_gt_wavs",f"mute{sr}.wav"),
-                        os.path.join(LOG_DIR,"mute",f"3_feature{fea_dim}","mute.npy"),
-                        os.path.join(LOG_DIR,"mute","2a_f0","mute.wav.npy"),
-                        os.path.join(LOG_DIR,"mute","2b-f0nsf","mute.wav.npy"),
+                        os.path.join(MUTE_DIR,"mute","0_gt_wavs",f"mute{sr}.wav"),
+                        os.path.join(MUTE_DIR,"mute",f"3_feature{fea_dim}","mute.npy"),
+                        os.path.join(MUTE_DIR,"mute","2a_f0","mute.wav.npy"),
+                        os.path.join(MUTE_DIR,"mute","2b-f0nsf","mute.wav.npy"),
                         str(0)
                     ])
                 else:
                     data = "|".join([
-                        os.path.join(LOG_DIR,"mute","0_gt_wavs",f"mute{sr}.wav"),
-                        os.path.join(LOG_DIR,"mute",f"3_feature{fea_dim}","mute.npy"),
+                        os.path.join(MUTE_DIR,"mute","0_gt_wavs",f"mute{sr}.wav"),
+                        os.path.join(MUTE_DIR,"mute",f"3_feature{fea_dim}","mute.npy"),
                         str(0)
                     ])
                 opt.append(data)
@@ -349,7 +349,7 @@ class RVCProcessDatasetNode:
             print("write filelist done")
         return (dict(
             sample_rate=sr,
-            model_dir=model_log_dir,
+            dataset_dir=dataset_dir,
             name=model_name,
             training_files=filelist_path,
             if_f0=bool(f0_method),
@@ -377,7 +377,7 @@ class RVCTrainModelNode:
             },
             "optional": dict(
                 gpu=(DEVICES, {"default": DEVICES[0]}),
-                batch_size=("INT",dict(default=4,min=0,max=64,step=4)),
+                batch_size=("INT",dict(default=4,min=1,max=64,step=1)),
                 total_epoch=("INT",dict(default=100,min=10,max=1000,step=10)),
                 save_every_epoch=("INT",dict(default=0,min=0,max=100)),
                 pretrained_G=(PRETRAINED_G,{"default": PRETRAINED_G[0]}),
@@ -388,7 +388,10 @@ class RVCTrainModelNode:
                 train_index=("BOOLEAN",{"default": True}),
                 retrain=("BOOLEAN",{"default": False}),
                 save_best_model=("BOOLEAN",{"default": True}),
-                log_every_epoch=("FLOAT",dict(default=1.,min=0.,max=2.,step=.5))
+                log_every_epoch=("FLOAT",dict(default=1.,min=0.,max=2.,step=.5)),
+                gradient_lambda=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
+                timbre_lambda=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
+                num_workers=("INT",dict(default=1,min=1,max=16))
             )
         }
 
@@ -415,11 +418,16 @@ class RVCTrainModelNode:
                     train_index=True,
                     retrain=False,
                     save_best_model=True,
-                    log_every_epoch=1.):
+                    log_every_epoch=1.,
+                    gradient_lambda=0.,
+                    timbre_lambda=0.,
+                    num_workers=1):
         
         sample_rate = rvc_dataset_pipe["sample_rate"]
         name = rvc_dataset_pipe["name"]
-        model_dir = rvc_dataset_pipe["model_dir"]
+        dataset_dir = rvc_dataset_pipe["dataset_dir"]
+        cache_name = get_hash(batch_size,pretrained_G,pretrained_D,gradient_lambda,timbre_lambda)
+        model_dir = os.path.join(output_path,"logs",cache_name)
         if_f0 = rvc_dataset_pipe["if_f0"]
 
         config_path = os.path.join(BASE_DIR,"configs",f"{sample_rate}{'' if sample_rate=='40k' else '_v2'}.json")
@@ -427,7 +435,8 @@ class RVCTrainModelNode:
             config = json.load(f)
 
         hparams = HParams(**config)
-        hparams.model_dir = hparams.experiment_dir = model_dir
+        hparams.experiment_dir = dataset_dir
+        hparams.model_dir = model_dir
         hparams.save_every_epoch = save_every_epoch
         hparams.name = name
         hparams.total_epoch = total_epoch
@@ -444,8 +453,11 @@ class RVCTrainModelNode:
         hparams.data.training_files = rvc_dataset_pipe["training_files"]
         hparams.save_best_model = save_best_model
         hparams.log_every_epoch = log_every_epoch
+        hparams.train.gradient_lambda = gradient_lambda
+        hparams.train.num_workers = num_workers
+        hparams.train.timbre_lambda = timbre_lambda
 
-        file_index = self.train_index(model_dir, sample_rate, name) if train_index else None
+        file_index = self.train_index(dataset_dir, sample_rate, name) if train_index else None
         model_path = os.path.join(BASE_MODELS_DIR,"RVC",f"{name}_{sample_rate}.pth")
         if os.path.isfile(model_path) and retrain: model_path = increment_filename_no_overwrite(model_path)
         hparams.model_path = model_path
@@ -455,9 +467,9 @@ class RVCTrainModelNode:
 
         return (lambda: get_vc(model_path, file_index), name, rvc_dataset_pipe["hubert_model"], rvc_dataset_pipe["pitch_extraction_params"])
 
-    def train_index(self, model_log_dir, sr, name):
+    def train_index(self, dataset_dir, sr, name):
 
-        key = get_hash(model_log_dir, sr, name)
+        key = get_hash(dataset_dir, sr, name)
         index_file = os.path.join(BASE_MODELS_DIR,"RVC",".index",f"{name}_v2_{sr}_{key}.index")
 
         try:
@@ -466,8 +478,7 @@ class RVCTrainModelNode:
                 from sklearn.cluster import MiniBatchKMeans
                 import faiss
 
-                feature_dir = os.sep.join([model_log_dir, "3_feature768"])
-                os.makedirs(feature_dir, exist_ok=True)
+                feature_dir = os.path.join(dataset_dir, "3_feature768")
 
                 npys = []
                 listdir_res = list(os.listdir(feature_dir))

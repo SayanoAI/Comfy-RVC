@@ -27,6 +27,7 @@ AUTOTUNE_NOTES = np.array([
     2093.00, 2217.46, 2349.32, 2489.02, 2637.02, 2793.83,
     2959.96, 3135.96, 3322.44, 3520.00, 3729.31, 3951.07
 ])
+SR_MAP = {"32k": 32000,"40k": 40000, "48k": 48000}
 
 class AudioProcessor:
     def __init__(self, normalize=True, threshold_silence=True, dynamic_threshold=True, sample_size=16000, multiplier=2.0, fill_method="median", kernel_size=5, silence_threshold_db=-50, normalize_threshold_db=-1):

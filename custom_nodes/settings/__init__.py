@@ -11,5 +11,4 @@ PITCH_EXTRACTION_OPTIONS = ["crepe","mangio-crepe","rmvpe","rmvpe+"]
 MERGE_OPTIONS=["median","mean","min","max"]
 TTS_MODELS = ["edge","speecht5"]
 N_THREADS_OPTIONS=[1,2,4,8,12,16]
-SR_MAP = {"32k": 32000,"40k": 40000, "48k": 48000}
 SUPPORTED_LANGUAGES = ['en', 'fr', 'es', "ja", "zh"]

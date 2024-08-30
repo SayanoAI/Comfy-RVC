@@ -382,6 +382,10 @@ def get_hparams(init=True):
     hparams.if_cache_data_in_gpu = args.if_cache_data_in_gpu
     hparams.data.training_files = os.path.join(experiment_dir,"filelist.txt")
     hparams.save_best_model = True
+    hparams.train.gradient_lambda = 0.
+    hparams.train.num_workers = 4
+    hparams.train.timbre_alpha = 0.
+    hparams.model_path = None
     return hparams
 
 
@@ -476,6 +480,10 @@ class HParams:
     def __repr__(self):
         return self.__dict__.__repr__()
     
+    def get(self, key, default=None):
+        try: return self[key]
+        except: return default
+    
     def sync_log_interval(self, dataset_length):
         log_interval = getattr(self,"log_every_epoch",1)
-        self.train.log_interval = int(self.train.batch_size*dataset_length*log_interval)
+        self.train.log_interval = int(dataset_length*log_interval)
