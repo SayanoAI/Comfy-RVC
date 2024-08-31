@@ -1,4 +1,4 @@
-import os, traceback
+import os
 import glob
 import sys
 import argparse
@@ -10,6 +10,17 @@ from scipy.io.wavfile import read
 import torch
 
 MATPLOTLIB_FLAG = False
+DEFAULT_TRAINING_PARAMS = dict(
+    batch_size=4,
+    c_mel=45,
+    c_kl=1.,
+    c_fm=2.,
+    c_gp=0.,
+    c_mfcc=0.,
+    c_lfcc=0.,
+    c_hd=0.,
+    c_sts=0.
+)
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 logger = logging
@@ -63,36 +74,6 @@ def load_checkpoint_d(checkpoint_path, combd, sbd, optimizer=None, load_opt=1):
     logger.info("Loaded checkpoint '{}' (epoch {})".format(checkpoint_path, iteration))
     return model, optimizer, learning_rate, iteration
 
-
-# def load_checkpoint(checkpoint_path, model, optimizer=None):
-#   assert os.path.isfile(checkpoint_path)
-#   checkpoint_dict = torch.load(checkpoint_path, map_location='cpu')
-#   iteration = checkpoint_dict['iteration']
-#   learning_rate = checkpoint_dict['learning_rate']
-#   if optimizer is not None:
-#     optimizer.load_state_dict(checkpoint_dict['optimizer'])
-#   # print(1111)
-#   saved_state_dict = checkpoint_dict['model']
-#   # print(1111)
-#
-#   if hasattr(model, 'module'):
-#     state_dict = model.module.state_dict()
-#   else:
-#     state_dict = model.state_dict()
-#   new_state_dict= {}
-#   for k, v in state_dict.items():
-#     try:
-#       new_state_dict[k] = saved_state_dict[k]
-#     except:
-#       logger.info("%s is not in the checkpoint" % k)
-#       new_state_dict[k] = v
-#   if hasattr(model, 'module'):
-#     model.module.load_state_dict(new_state_dict)
-#   else:
-#     model.load_state_dict(new_state_dict)
-#   logger.info("Loaded checkpoint '{}' (epoch {})" .format(
-#     checkpoint_path, iteration))
-#   return model, optimizer, learning_rate, iteration
 def load_checkpoint(checkpoint_path, model, optimizer=None, load_opt=1):
     assert os.path.isfile(checkpoint_path)
     checkpoint_dict = torch.load(checkpoint_path, map_location="cpu")
@@ -382,10 +363,9 @@ def get_hparams(init=True):
     hparams.if_cache_data_in_gpu = args.if_cache_data_in_gpu
     hparams.data.training_files = os.path.join(experiment_dir,"filelist.txt")
     hparams.save_best_model = True
-    hparams.train.gradient_lambda = 0.
     hparams.train.num_workers = 4
-    hparams.train.timbre_lambda = 0.
     hparams.model_path = None
+    hparams.best_model_threshold = 50
     return hparams
 
 
@@ -449,11 +429,10 @@ def get_logger(model_dir, filename="train.log"):
     return logger
 
 
-class HParams:
+class HParams():
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
-            if isinstance(v, dict):
-                v = HParams(**v)
+            if isinstance(v, dict): v = HParams(**v)
             self[k] = v
 
     def keys(self):
@@ -483,7 +462,14 @@ class HParams:
     def get(self, key, default=None):
         try: return self[key]
         except: return default
+
+    def update(self, data={}, **kwargs):
+        data.update(kwargs)
+        for k, v in data.items():
+            if isinstance(v, dict): v = HParams(**v)
+            if k in self and hasattr(self[k], "update") and isinstance(v, HParams): self[k].update(v)
+            else: self[k] = v
     
     def sync_log_interval(self, dataset_length):
-        log_interval = getattr(self,"log_every_epoch",1)
+        log_interval = getattr(self,"log_every_epoch",1.)
         self.train.log_interval = int(dataset_length*log_interval)

@@ -127,10 +127,10 @@ def run(rank, n_gpus, hps, device):
     if os.path.isfile(loss_file):
         with open(loss_file,"r") as f:
             data: dict = json.load(f)
-            least_loss = data.get("least_loss",50)
+            least_loss = data.get("least_loss",hps.best_model_threshold)
             best_model_name = data.get("best_model_name","")
     else:
-        least_loss = 50
+        least_loss = hps.best_model_threshold
         best_model_name = ""
 
     if hps.version == "v1":
@@ -481,7 +481,7 @@ def train_and_evaluate(
             
             with autocast(enabled=False):
                 gradient_penalty = torch.Tensor([0.]).to(wave.device)
-                if hps.train.get("gradient_lambda",0.)>0:
+                if hps.train.get("c_gp",0.)>0:
                     # Compute the gradient penalty
                     # Randomly interpolate between real and generated data
                     size = [1]*wave.ndim
@@ -502,10 +502,10 @@ def train_and_evaluate(
                         )[0]
                         gradient = gradient.view(gradient.size(0), -1)
                         gradient_penalty += torch.log(gradient.norm(2,dim=-1)).abs().mean() # force gradnorm=1
-                    gradient_penalty *= hps.train.gradient_lambda/len(disc_interpolated_output)
+                    gradient_penalty *= hps.train.c_gp/len(disc_interpolated_output)
 
                 loss_mfcc =  torch.Tensor([0.]).to(wave.device)
-                if hps.train.get("timbre_lambda",0)>0:
+                if hps.train.get("c_mfcc",0)>0:
                     loss_mfcc = mfcc_loss(wave, gen_wave, SR_MAP[hps.sample_rate],
                                             n_fft=hps.data.filter_length,
                                             hop_length=hps.data.hop_length,
@@ -514,7 +514,7 @@ def train_and_evaluate(
                                             norm="slaney",
                                             f_min=hps.data.mel_fmin,
                                             f_max=hps.data.mel_fmax
-                                            ) * hps.train.timbre_lambda
+                                            ) * hps.train.c_mfcc
                 
                 loss_mfcc = loss_mfcc.squeeze()
                 gradient_penalty = gradient_penalty.squeeze()
@@ -531,9 +531,9 @@ def train_and_evaluate(
             # Generator
             y_d_hat_r, y_d_hat_g, fmap_r, fmap_g = net_d(wave, y_hat)
             with autocast(enabled=False):
-                loss_mel = F.smooth_l1_loss(y_mel, y_hat_mel) * hps.train.c_mel
-                loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask) * hps.train.c_kl
-                loss_fm = feature_loss(fmap_r, fmap_g)
+                loss_mel = F.smooth_l1_loss(y_mel, y_hat_mel) * hps.train.get("c_mel",45.)
+                loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask) * hps.train.get("c_kl",1.)
+                loss_fm = feature_loss(fmap_r, fmap_g) * hps.train.get("c_fm",2.)
                 loss_gen, losses_gen = generator_loss(y_d_hat_g)
                 loss_gen_all = loss_gen + loss_fm + loss_mel + loss_kl
                 
@@ -556,7 +556,7 @@ def train_and_evaluate(
                     else:
                         ckpt = net_g.state_dict()
                     
-                    best_model_name = f"{hps.name}_loss{least_loss:2.0f}" if hps.if_save_latest else f"{hps.name}_e{epoch}_s{global_step}_loss{least_loss:2.0f}"
+                    best_model_name = f"{hps.name}_e{epoch}_s{global_step}_loss{least_loss:2.0f}" if hps.save_every_weights else f"{hps.name}_loss{least_loss:2.0f}"
                     status = save_checkpoint(ckpt,best_model_name,epoch,hps)
                     logger.info(f"=== saving best model {best_model_name}: {status=} ===")
                 

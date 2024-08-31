@@ -8,7 +8,7 @@ import torch
 
 from . import BASE_DIR
 
-from ..lib.train.utils import HParams
+from ..lib.train.utils import HParams, DEFAULT_TRAINING_PARAMS
 
 from ..training_cli import train_model
 
@@ -153,12 +153,8 @@ class LoadRVCModelNode:
     
 class RVCNode:
     
-    def __init__(self):
-        pass
-    
     @classmethod
     def INPUT_TYPES(cls):
-
 
         return {
             "required": {
@@ -212,9 +208,6 @@ class RVCNode:
         return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda:audio_to_bytes(*output_audio),)}
     
 class RVCProcessDatasetNode:
-    
-    def __init__(self):
-        pass
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -358,10 +351,36 @@ class RVCProcessDatasetNode:
             ),)
 
 
-class RVCTrainModelNode:
+class RVCTrainParamsNode:
     
-    def __init__(self):
-        pass
+    @classmethod
+    def INPUT_TYPES(cls):
+        
+        return {
+            "optional": dict(
+                batch_size=("INT",dict(default=4,min=1,max=64,step=1)),
+                c_mel=("FLOAT",dict(default=45.,min=0.,max=100.,step=.1)),
+                c_kl=("FLOAT",dict(default=1.,min=0.,max=100.,step=.1)),
+                c_fm=("FLOAT",dict(default=2.,min=0.,max=100.,step=.1)),
+                c_mfcc=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
+                c_lfcc=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
+                c_hd=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
+                c_sts=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
+                c_gp=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
+            )
+        }
+
+    RETURN_TYPES = ('RVC_TRAINING_PARAMS', )
+    RETURN_NAMES = ("rvc_training_params", )
+
+    FUNCTION = "init"
+
+    CATEGORY = CATEGORY
+
+    def init(self,batch_size=4,c_mel=45,c_kl=1.,c_fm=1.,c_mfcc=0.,c_lfcc=0.,c_hd=0.,c_sts=0.,c_gp=0.,):
+        return (dict(batch_size=batch_size,c_mel=c_mel,c_kl=c_kl,c_fm=c_fm,c_mfcc=c_mfcc,c_gp=c_gp,c_lfcc=c_lfcc,c_hd=c_hd,c_sts=c_sts),)
+
+class RVCTrainModelNode:
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -374,10 +393,10 @@ class RVCTrainModelNode:
         return {
             "required": {
                 "rvc_dataset_pipe": ("RVC_DATASET_PIPE",),
+                "rvc_training_params": ("RVC_TRAINING_PARAMS",dict(default=DEFAULT_TRAINING_PARAMS)),
             },
             "optional": dict(
                 gpu=(DEVICES, {"default": DEVICES[0]}),
-                batch_size=("INT",dict(default=4,min=1,max=64,step=1)),
                 total_epoch=("INT",dict(default=100,min=10,max=1000,step=10)),
                 save_every_epoch=("INT",dict(default=0,min=0,max=100)),
                 pretrained_G=(PRETRAINED_G,{"default": PRETRAINED_G[0]}),
@@ -388,9 +407,8 @@ class RVCTrainModelNode:
                 train_index=("BOOLEAN",{"default": True}),
                 retrain=("BOOLEAN",{"default": False}),
                 save_best_model=("BOOLEAN",{"default": True}),
+                best_model_threshold=("INT",dict(default=50,min=20,max=80)),
                 log_every_epoch=("FLOAT",dict(default=1.,min=0.,max=2.,step=.5)),
-                gradient_lambda=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
-                timbre_lambda=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
                 num_workers=("INT",dict(default=1,min=1,max=16))
             )
         }
@@ -406,8 +424,8 @@ class RVCTrainModelNode:
 
     def train_model(self,
                     rvc_dataset_pipe,
+                    rvc_training_params,
                     gpu="0",
-                    batch_size=4,
                     total_epoch=100,
                     save_every_epoch=0,
                     pretrained_G="",
@@ -418,15 +436,14 @@ class RVCTrainModelNode:
                     train_index=True,
                     retrain=False,
                     save_best_model=True,
+                    best_model_threshold=50,
                     log_every_epoch=1.,
-                    gradient_lambda=0.,
-                    timbre_lambda=0.,
                     num_workers=1):
         
         sample_rate = rvc_dataset_pipe["sample_rate"]
         name = rvc_dataset_pipe["name"]
         dataset_dir = rvc_dataset_pipe["dataset_dir"]
-        cache_name = get_hash(batch_size,pretrained_G,pretrained_D,gradient_lambda,timbre_lambda)
+        cache_name = get_hash(pretrained_G,pretrained_D,*rvc_training_params.items())
         model_dir = os.path.join(output_path,"logs",cache_name)
         if_f0 = rvc_dataset_pipe["if_f0"]
 
@@ -444,7 +461,6 @@ class RVCTrainModelNode:
         hparams.pretrainD = model_downloader(pretrained_D)
         hparams.version = "v2"
         hparams.gpus = gpu
-        hparams.train.batch_size = max(batch_size,1)
         hparams.sample_rate = sample_rate
         hparams.if_f0 = if_f0
         hparams.if_latest = if_save_latest
@@ -452,10 +468,10 @@ class RVCTrainModelNode:
         hparams.if_cache_data_in_gpu = if_cache_gpu
         hparams.data.training_files = rvc_dataset_pipe["training_files"]
         hparams.save_best_model = save_best_model
+        hparams.best_model_threshold = best_model_threshold
         hparams.log_every_epoch = log_every_epoch
-        hparams.train.gradient_lambda = gradient_lambda
         hparams.train.num_workers = num_workers
-        hparams.train.timbre_lambda = timbre_lambda
+        hparams.train.update(rvc_training_params)
 
         file_index = self.train_index(dataset_dir, sample_rate, name) if train_index else None
         model_path = os.path.join(BASE_MODELS_DIR,"RVC",f"{name}_{sample_rate}.pth")
@@ -531,7 +547,8 @@ NODE_CLASS_MAPPINGS = {
     "LoadHubertModel": LoadHubertModel,
     "LoadPitchExtractionParams": LoadPitchExtractionParams,
     "RVCProcessDatasetNode": RVCProcessDatasetNode,
-    "RVCTrainModelNode": RVCTrainModelNode
+    "RVCTrainModelNode": RVCTrainModelNode,
+    "RVCTrainParamsNode": RVCTrainParamsNode
 }
 
 # A dictionary that contains the friendly/humanly readable titles for the nodes
@@ -542,4 +559,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LoadPitchExtractionParams": "🌺Load Pitch Extraction Params",
     "RVCProcessDatasetNode": "🌺Process RVC Dataset",
     "RVCTrainModelNode": "🌺Train RVC Model",
+    "RVCTrainParamsNode": "🌺RVC Training Params"
 }
