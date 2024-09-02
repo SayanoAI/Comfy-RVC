@@ -1,9 +1,20 @@
 import math
-import numpy as np
 import torch
-from torch import nn
 from torch.nn import functional as F
 
+def median_pool1d(signal, kernel_size, dim=-1,stride=1):
+    # Pad the input to handle edge cases
+    padding = (kernel_size - 1) // 2
+
+    input_padded = F.pad(signal, (padding, padding), mode='reflect')
+    
+    # Unfold the input to create sliding windows
+    unfolded = input_padded.unfold(-1, kernel_size, stride)
+    
+    # Compute the median along the last dimension
+    median = unfolded.median(dim=dim).values
+    
+    return median
 
 def init_weights(m, mean=0.0, std=0.01):
     classname = m.__class__.__name__

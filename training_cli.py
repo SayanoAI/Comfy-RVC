@@ -29,7 +29,7 @@ from .lib.train.data_utils import (
     TextAudioCollate,
     DistributedBucketSampler,
 )
-from .lib.train.losses import generator_loss, discriminator_loss, feature_loss, kl_loss, mfcc_loss
+from .lib.train.losses import combined_aux_loss, generator_loss, discriminator_loss, feature_loss, gradient_norm_loss, kl_loss
 from .lib.train.mel_processing import mel_spectrogram_torch, spec_to_mel_torch
 
 def save_checkpoint(ckpt, name, epoch, hps, model_path=None):
@@ -327,7 +327,7 @@ def train_and_evaluate(
             # Make new cache
             for batch_idx, info in enumerate(train_loader):
                 # Unpack
-                if hps.if_f0 == 1:
+                if hps.if_f0:
                     (
                         phone,
                         phone_lengths,
@@ -353,7 +353,7 @@ def train_and_evaluate(
                 if torch.cuda.is_available():
                     phone = phone.cuda(rank, non_blocking=True)
                     phone_lengths = phone_lengths.cuda(rank, non_blocking=True)
-                    if hps.if_f0 == 1:
+                    if hps.if_f0:
                         pitch = pitch.cuda(rank, non_blocking=True)
                         pitchf = pitchf.cuda(rank, non_blocking=True)
                     sid = sid.cuda(rank, non_blocking=True)
@@ -362,7 +362,7 @@ def train_and_evaluate(
                     wave = wave.cuda(rank, non_blocking=True)
                     wave_lengths = wave_lengths.cuda(rank, non_blocking=True)
                 # Cache on list
-                if hps.if_f0 == 1:
+                if hps.if_f0:
                     cache.append(
                         (
                             batch_idx,
@@ -406,7 +406,7 @@ def train_and_evaluate(
     for batch_idx, info in tqdm(data_iterator,desc=f"[Epoch {epoch}]: "):
         # Data
         ## Unpack
-        if hps.if_f0 == 1:
+        if hps.if_f0:
             (
                 phone,
                 phone_lengths,
@@ -424,7 +424,7 @@ def train_and_evaluate(
         if (not hps.if_cache_data_in_gpu) and torch.cuda.is_available():
             phone = phone.cuda(rank, non_blocking=True)
             phone_lengths = phone_lengths.cuda(rank, non_blocking=True)
-            if hps.if_f0 == 1:
+            if hps.if_f0:
                 pitch = pitch.cuda(rank, non_blocking=True)
                 pitchf = pitchf.cuda(rank, non_blocking=True)
             sid = sid.cuda(rank, non_blocking=True)
@@ -434,7 +434,7 @@ def train_and_evaluate(
 
         # Calculate
         with autocast(enabled=hps.train.fp16_run):
-            if hps.if_f0 == 1:
+            if hps.if_f0:
                 (
                     y_hat,
                     ids_slice,
@@ -473,6 +473,7 @@ def train_and_evaluate(
                     hps.data.mel_fmax,
                 )
             if hps.train.fp16_run: y_hat_mel = y_hat_mel.half()
+            wave_orig = wave.clone()
             wave = commons.slice_segments(wave, ids_slice * hps.data.hop_length, hps.train.segment_size)  # slice
 
             # Discriminator
@@ -480,46 +481,9 @@ def train_and_evaluate(
             y_d_hat_r, y_d_hat_g, _, _ = net_d(wave, gen_wave)
             
             with autocast(enabled=False):
-                gradient_penalty = torch.Tensor([0.]).to(wave.device)
-                if hps.train.get("c_gp",0.)>0:
-                    # Compute the gradient penalty
-                    # Randomly interpolate between real and generated data
-                    size = [1]*wave.ndim
-                    size[0] = wave.size(0)
-                    alpha = torch.rand(*size, device=wave.device)
-                    interpolated = alpha * wave + (1 - alpha) * gen_wave
-                    interpolated.requires_grad_(True)
-                    # Get the discriminator output for the interpolated data
-                    _, disc_interpolated_output, _, _ = net_d(wave, interpolated)
-                    # Compute gradients of discriminator output w.r.t. interpolated data
-                    for output in disc_interpolated_output:
-                        gradient = torch.autograd.grad(
-                            outputs=output,
-                            inputs=interpolated,
-                            grad_outputs=torch.ones(output.size(), device=wave.device),
-                            create_graph=True,
-                            only_inputs=True
-                        )[0]
-                        gradient = gradient.view(gradient.size(0), -1)
-                        gradient_penalty += torch.log(gradient.norm(2,dim=-1)).abs().mean() # force gradnorm=1
-                    gradient_penalty *= hps.train.c_gp/len(disc_interpolated_output)
-
-                loss_mfcc =  torch.Tensor([0.]).to(wave.device)
-                if hps.train.get("c_mfcc",0)>0:
-                    loss_mfcc = mfcc_loss(wave, gen_wave, SR_MAP[hps.sample_rate],
-                                            n_fft=hps.data.filter_length,
-                                            hop_length=hps.data.hop_length,
-                                            win_length=hps.data.win_length,
-                                            n_mels=hps.data.n_mel_channels,
-                                            norm="slaney",
-                                            f_min=hps.data.mel_fmin,
-                                            f_max=hps.data.mel_fmax
-                                            ) * hps.train.c_mfcc
-                
-                loss_mfcc = loss_mfcc.squeeze()
-                gradient_penalty = gradient_penalty.squeeze()
+                gradient_penalty = gradient_norm_loss(wave,gen_wave, net_d)*hps.train.c_gp if hps.train.get("c_gp",0.)>0 else 0
                 loss_disc, losses_disc_r, losses_disc_g = discriminator_loss(y_d_hat_r, y_d_hat_g)
-                loss_disc_all = loss_disc+gradient_penalty+loss_mfcc
+                loss_disc_all = loss_disc+gradient_penalty
 
             optim_d.zero_grad()
             scaler.scale(loss_disc_all).backward()
@@ -531,11 +495,25 @@ def train_and_evaluate(
             # Generator
             y_d_hat_r, y_d_hat_g, fmap_r, fmap_g = net_d(wave, y_hat)
             with autocast(enabled=False):
-                loss_mel = F.smooth_l1_loss(y_mel, y_hat_mel) * hps.train.get("c_mel",45.)
+                loss_mel = F.l1_loss(y_mel, y_hat_mel) * hps.train.get("c_mel",45.)
                 loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask) * hps.train.get("c_kl",1.)
                 loss_fm = feature_loss(fmap_r, fmap_g) * hps.train.get("c_fm",2.)
+                harmonic_loss, temporal_loss, spectral_loss, mfcc_loss, lfcc_loss, phase_loss = combined_aux_loss(
+                    wave, y_hat, SR_MAP[hps.sample_rate],
+                    c_lfcc=hps.train.get("c_lfcc",0.),
+                    c_mfcc=hps.train.get("c_mfcc",0.),
+                    c_hd=hps.train.get("c_hd",0.),
+                    c_sts=hps.train.get("c_sts",0.),
+                    n_fft=hps.data.filter_length,
+                    hop_length=hps.data.hop_length,
+                    win_length=hps.data.win_length,
+                    n_filter=hps.data.n_mel_channels,
+                    f_min=hps.data.mel_fmin,
+                    f_max=hps.data.mel_fmax
+                )
                 loss_gen, losses_gen = generator_loss(y_d_hat_g)
-                loss_gen_all = loss_gen + loss_fm + loss_mel + loss_kl
+                aux_loss = harmonic_loss + temporal_loss + spectral_loss + mfcc_loss + lfcc_loss + phase_loss
+                loss_gen_all = loss_gen + loss_fm + loss_mel + loss_kl + aux_loss
                 
             optim_g.zero_grad()
             scaler.scale(loss_gen_all).backward()
@@ -548,13 +526,12 @@ def train_and_evaluate(
             # if epoch>=max(hps.total_epoch*.2,20): #start saving best model after 20% or 20 epochs
             if loss_gen_all+loss_disc_all<least_loss:
                 least_loss = loss_gen_all+loss_disc_all
-                logger.info(f"[lowest loss] {least_loss=:.3f}: {loss_disc=:.3f} {loss_mfcc=:.3f} {gradient_penalty=:.3f}, {loss_gen=:.3f}, {loss_fm=:.3f}, {loss_mel=:.3f}, {loss_kl=:.3f}")
+                logger.info(f"[lowest loss] {least_loss=:.3f}: {loss_disc=:.3f} {gradient_penalty=:.3f} <==> {loss_gen=:.3f} {loss_fm=:.3f} {loss_mel=:.3f} {loss_kl=:.3f}")
+                logger.info(f"[aux] {aux_loss=:.3f}: {harmonic_loss=:.3f}, {temporal_loss=:.3f}, {spectral_loss=:.3f}, {mfcc_loss=:.3f}, {lfcc_loss=:.3f} {phase_loss=:.3f}")
 
                 if hps.save_best_model:
-                    if hasattr(net_g, "module"):
-                        ckpt = net_g.module.state_dict()
-                    else:
-                        ckpt = net_g.state_dict()
+                    if hasattr(net_g, "module"): ckpt = net_g.module.state_dict()
+                    else: ckpt = net_g.state_dict()
                     
                     best_model_name = f"{hps.name}_e{epoch}_s{global_step}_loss{least_loss:2.0f}" if hps.save_every_weights else f"{hps.name}_loss{least_loss:2.0f}"
                     status = save_checkpoint(ckpt,best_model_name,epoch,hps)
@@ -575,16 +552,22 @@ def train_and_evaluate(
                 scalar_dict = {
                     "total/loss/all": loss_gen_all+loss_disc_all,
                     "total/loss/gen_all": loss_gen_all,
+                    "total/loss/aux": aux_loss,
                     "total/loss/disc_all": loss_disc_all,
                     "total/loss/gen": loss_gen,
                     "total/loss/disc": loss_disc,
                     "total/loss/fm": loss_fm,
                     "total/loss/mel": loss_mel,
                     "total/loss/kl": loss_kl,
-                    "total/loss/mfcc": loss_mfcc,
-                    "learning_rate": lr,
-                    "gradient/grad_norm_d": grad_norm_d,
-                    "gradient/grad_norm_g": grad_norm_g,
+                    "aux/loss/harmonic": harmonic_loss,
+                    "aux/loss/temporal": temporal_loss,
+                    "aux/loss/spectral": spectral_loss,
+                    "aux/loss/mfcc": mfcc_loss,
+                    "aux/loss/lfcc": lfcc_loss,
+                    "aux/loss/phase_loss": phase_loss,
+                    "gradient/lr": lr,
+                    "gradient/grad_norm_disc": grad_norm_d,
+                    "gradient/grad_norm_gen": grad_norm_g,
                     "gradient/gradient_penalty": gradient_penalty,
                     **{f"loss/g/{i}": v for i, v in enumerate(losses_gen)},
                     **{f"loss/d_r/{i}": v for i, v in enumerate(losses_disc_r)},
@@ -597,9 +580,15 @@ def train_and_evaluate(
                     "all/mel": utils.plot_spectrogram_to_numpy(mel[0].data.cpu().numpy()),
                 }
 
+                with torch.no_grad():
+                    if hasattr(net_g, "module"): inference = net_g.module.infer
+                    else: inference = net_g.infer
+                    if hps.if_f0: wave_gen = inference(phone, phone_lengths, pitch, pitchf, sid)[0][0, 0].data
+                    else: wave_gen = inference(phone, phone_lengths, sid)[0][0, 0].data
+                    
                 audio_dict = {
-                    "slice/wave_org": wave.flatten(),
-                    "slice/wave_gen": y_hat.flatten()
+                    "slice/wave_org": wave_orig[0][0],
+                    "slice/wave_gen": wave_gen
                 }
                 utils.summarize(
                     writer=writer,
@@ -637,14 +626,15 @@ def train_and_evaluate(
 
     if rank == 0:
         logger.info(f"====> Epoch {epoch} (Total Loss={(loss_disc_all+loss_gen_all).item():.3f}): {global_step=} {lr=:.2E} {epoch_recorder.record()}")
-        logger.info(f"|| {loss_disc_all=:.3f}: {loss_disc=:.3f}, {loss_mfcc=:.3f}, {gradient_penalty=:.3f}")
+        logger.info(f"|| {loss_disc_all=:.3f}: {loss_disc=:.3f}, {gradient_penalty=:.3f}")
         logger.info(f"|| {loss_gen_all=:.3f}: {loss_gen=:.3f}, {loss_fm=:.3f}, {loss_mel=:.3f}, {loss_kl=:.3f}")
+        logger.info(f"|| {harmonic_loss=:.3f}, {temporal_loss=:.3f}, {spectral_loss=:.3f}, {mfcc_loss=:.3f}, {lfcc_loss=:.3f}, {phase_loss=:.3f}")
 
     if epoch >= hps.total_epoch and rank == 0:
         logger.info("Training is done. The program is closed.")
 
         ckpt = net_g.module.state_dict() if hasattr(net_g, "module") else net_g.state_dict()
-        if hps.save_best_model:
+        if hps.save_best_model and os.path.isfile(loss_file):
             with open(loss_file,"r") as f:
                 data = json.load(f)
                 best_model_name = data.get("best_model_name","")

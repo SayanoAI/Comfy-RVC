@@ -408,7 +408,7 @@ class RVCTrainModelNode:
                 retrain=("BOOLEAN",{"default": False}),
                 save_best_model=("BOOLEAN",{"default": True}),
                 best_model_threshold=("INT",dict(default=50,min=20,max=80)),
-                log_every_epoch=("FLOAT",dict(default=1.,min=0.,max=2.,step=.5)),
+                log_every_epoch=("FLOAT",dict(default=1.,min=0.,max=2.,step=.1)),
                 num_workers=("INT",dict(default=1,min=1,max=16))
             )
         }
