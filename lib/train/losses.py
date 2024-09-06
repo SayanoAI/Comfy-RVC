@@ -3,23 +3,63 @@ import torchaudio
 import torch.nn.functional as F
 from ..infer_pack.commons import median_pool1d
 
-def compute_temporal_envelope(log_magnitude: torch.Tensor, kernel_size=31):
+def log1p_autocorrelation(log_magnitude, max_lag=None):
+    """
+    Computes the autocorrelation of log-magnitude spectrogram.
+    :param log_magnitude: Log magnitude spectrogram (batch, channels, time)
+    :param max_lag: Maximum lag for which to compute autocorrelation.
+    :return: Autocorrelation of the log-magnitude spectrogram.
+    """
+    if max_lag is None:
+        max_lag = log_magnitude.size(-1) // 2  # Default to half the signal length
 
-    # Apply median pooling to the generated audio
-    pooled_stft = median_pool1d(log_magnitude, kernel_size, stride=kernel_size//2+1)
+    # Ensure the signal is zero-mean
+    log_magnitude = log_magnitude - log_magnitude.mean(dim=-1, keepdim=True)
     
-    # Compute differences on the median-pooled audio
-    diff = F.normalize(torch.diff(pooled_stft, dim=-1, n=1),dim=-1)
+    # Compute autocorrelation using FFT-based convolution
+    padded_log_magnitude = F.pad(log_magnitude, (0, max_lag))
+    # autocorr = torch.corrcoef(padded_log_magnitude)
+    autocorr = F.conv1d(padded_log_magnitude, log_magnitude.flip(dims=[-1]))
     
-    # Return the mean of the differences as the loss
-    return diff.sum(dim=-2).nan_to_num(0)
+    # Take only the relevant part and normalize
+    autocorr = F.normalize(autocorr[:, :max_lag + 1],p=2,dim=-1)
+    
+    return autocorr.nan_to_num(0)
+
+def compute_phase_loss(original_log_magnitude, generated_log_magnitude, max_lag=None):
+    """
+    Computes a time-shift invariant loss based on autocorrelation for log-magnitude data.
+    :param original_log_magnitude: Original log-magnitude spectrogram (batch, channels, time)
+    :param generated_log_magnitude: Generated log-magnitude spectrogram (batch, channels, time)
+    :param max_lag: Maximum lag for which to compute autocorrelation.
+    :return: Loss value.
+    """
+    # Compute autocorrelations
+    original_autocorr = log1p_autocorrelation(original_log_magnitude, max_lag)
+    generated_autocorr = log1p_autocorrelation(generated_log_magnitude, max_lag)
+
+    # Compute the loss between autocorrelations
+    loss = F.smooth_l1_loss(generated_autocorr, original_autocorr)
+    
+    return loss
+    
+def compute_temporal_envelope(log_magnitude: torch.Tensor, kernel_size=31):
+    """Compute the temporal envelope loss using median pooling and second-order differences."""
+    
+    # Apply median pooling to the log-magnitude spectrogram
+    pooled_stft = median_pool1d(log_magnitude, kernel_size, stride=kernel_size // 2 + 1)
+    
+    # Compute second-order differences on the median-pooled audio
+    diff = torch.diff(pooled_stft, dim=-1, n=2)
+    
+    return diff.nan_to_num(0)
 
 def compute_cepstrals(log_magnitude: torch.Tensor, kernel_size=31):
 
     pooled_magnitude = median_pool1d(log_magnitude, kernel_size, stride=kernel_size//2+1)
 
     # Compute the cepstrum
-    cepstral_coefficients = torch.fft.ifft(pooled_magnitude, dim=-2).real
+    cepstral_coefficients = torch.fft.ifft(pooled_magnitude, dim=-2).abs()
     
     return cepstral_coefficients.sum(dim=-2).nan_to_num(0)
 
@@ -28,25 +68,23 @@ def compute_sts_loss(gen_stft: torch.Tensor, org_stft: torch.Tensor, kernel_size
     # B?N?T
     org_mag = torch.log1p(org_stft.abs())
     gen_mag = torch.log1p(gen_stft.abs())
-
-    gen_temp = compute_temporal_envelope(gen_mag, kernel_size=kernel_size)
-    org_temp = compute_temporal_envelope(org_mag, kernel_size=kernel_size)
-    temporal_loss = 1-F.cosine_similarity(gen_temp, org_temp, dim=-1).mean()
-
-    gen_spec = compute_cepstrals(org_mag,kernel_size=kernel_size)
-    org_spec = compute_cepstrals(gen_mag,kernel_size=kernel_size)
-
-    spectral_loss = F.smooth_l1_loss(gen_spec, org_spec)
-
-    org_phase = org_stft.angle()
-    gen_phase = gen_stft.angle()
+    org_temp = torch.log1p(org_stft.abs().sum(-2,keepdim=True))
+    gen_temp = torch.log1p(gen_stft.abs().sum(-2,keepdim=True))
 
     # temporal invariant phase
-    org_phase = median_pool1d(org_stft.angle(),3,stride=3).mean(-1)
-    gen_phase = median_pool1d(gen_stft.angle(),3,stride=3).mean(-1)
-    phase_loss = F.smooth_l1_loss(gen_phase,org_phase)+F.smooth_l1_loss(1-torch.cos(gen_phase-org_phase),torch.zeros_like(gen_phase))
+    phase_loss = compute_phase_loss(org_temp,gen_temp)
 
-    return temporal_loss, spectral_loss, phase_loss.nan_to_num(0)
+    # temporal envelope
+    gen_temp = compute_temporal_envelope(gen_mag, kernel_size=kernel_size)
+    org_temp = compute_temporal_envelope(org_mag, kernel_size=kernel_size)
+    temporal_loss = F.smooth_l1_loss(gen_temp, org_temp)
+
+    # spectral
+    gen_spec = compute_cepstrals(gen_mag,kernel_size=kernel_size)
+    org_spec = compute_cepstrals(org_mag,kernel_size=kernel_size)
+    spectral_loss = F.smooth_l1_loss(gen_spec, org_spec)
+
+    return temporal_loss, spectral_loss, phase_loss
 
 def compute_harmonics(stft_matrix: torch.Tensor, kernel_size=31):
     # Calculate log-magnitude spectrograms
@@ -80,6 +118,7 @@ def combined_aux_loss(
             win_length=win_length,
             window=hann_window,
             return_complex=True,
+            onesided=True,
             center=False)
         original_stft = torch.stft(
             original_audio.view(-1,original_audio.size(-1)),
@@ -88,6 +127,7 @@ def combined_aux_loss(
             win_length=win_length,
             window=hann_window,
             return_complex=True,
+            onesided=True,
             center=False)
     
     # Harmonic Loss
@@ -112,7 +152,7 @@ def combined_aux_loss(
     # MFCC Loss
     if c_mfcc>0:
         mfcc_transform = torchaudio.transforms.MFCC(
-            sample_rate=sample_rate, n_mfcc=n_mfcc, 
+            sample_rate=sample_rate, n_mfcc=n_mfcc, log_mels=True,
             melkwargs=dict(n_fft=n_fft, hop_length=hop_length, win_length=win_length, n_mels=n_filter, f_min=f_min, f_max=f_max)
         ).to(original_audio.device)
         original_mfcc = mfcc_transform(original_audio)
@@ -123,7 +163,7 @@ def combined_aux_loss(
     # LFCC Loss
     if c_lfcc>0:
         lfcc_transform = torchaudio.transforms.LFCC(
-            sample_rate=sample_rate, n_lfcc=n_lfcc, n_filter=n_filter, f_min=f_min, f_max=f_max,
+            sample_rate=sample_rate, n_lfcc=n_lfcc, n_filter=n_filter, f_min=f_min, f_max=f_max,log_lf=True,
             speckwargs=dict(n_fft=n_fft, hop_length=hop_length, win_length=win_length)
         ).to(original_audio.device)
         original_lfcc = lfcc_transform(original_audio)

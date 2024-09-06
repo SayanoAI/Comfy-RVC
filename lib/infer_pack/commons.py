@@ -163,7 +163,7 @@ def generate_path(duration, mask):
     return path
 
 
-def clip_grad_value_(parameters, clip_value, norm_type=2):
+def clip_grad_value_(parameters, clip_value, norm_type=2, batch_size=1):
     if isinstance(parameters, torch.Tensor):
         parameters = [parameters]
     parameters = list(filter(lambda p: p.grad is not None, parameters))
@@ -173,7 +173,7 @@ def clip_grad_value_(parameters, clip_value, norm_type=2):
 
     total_norm = 0
     for p in parameters:
-        param_norm = p.grad.data.norm(norm_type)
+        param_norm = p.grad.data.norm(norm_type)/batch_size
         total_norm += param_norm.item() ** norm_type
         if clip_value is not None:
             p.grad.data.clamp_(min=-clip_value, max=clip_value)

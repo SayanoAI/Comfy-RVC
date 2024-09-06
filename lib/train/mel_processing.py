@@ -74,7 +74,7 @@ def spectrogram_torch(y, n_fft, sampling_rate, hop_size, win_size, center=False)
     y = y.squeeze(1)
 
     # Complex Spectrogram :: (B, T) -> (B, Freq, Frame, RealComplex=2)
-    spec = torch.stft(
+    spec = torch.view_as_real(torch.stft(
         y,
         n_fft,
         hop_length=hop_size,
@@ -84,8 +84,8 @@ def spectrogram_torch(y, n_fft, sampling_rate, hop_size, win_size, center=False)
         pad_mode="reflect",
         normalized=False,
         onesided=True,
-        return_complex=False,
-    )
+        return_complex=True,
+    ))
 
     # Linear-frequency Linear-amplitude spectrogram :: (B, Freq, Frame, RealComplex=2) -> (B, Freq, Frame)
     spec = torch.sqrt(spec.pow(2).sum(-1) + 1e-6)

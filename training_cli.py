@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import traceback
+import numpy as np
 
 from tqdm import tqdm
 from .lib.audio import SR_MAP
@@ -120,9 +121,10 @@ def train_model(hps: "utils.HParams"):
 
 def run(rank, n_gpus, hps, device):
     print(f"{__name__=}")
-    global global_step, least_loss, loss_file, best_model_name
+    global global_step, least_loss, loss_file, best_model_name, gradient_clip_value
     global_step = 0
     loss_file = os.path.join(hps.model_dir,"losses.json")
+    gradient_clip_value = np.log(hps.train.c_gp/hps.train.learning_rate) if hps.train.get("c_gp",0.)>0 else None
 
     if os.path.isfile(loss_file):
         with open(loss_file,"r") as f:
@@ -314,7 +316,7 @@ def train_and_evaluate(
         writer, _ = writers
 
     train_loader.batch_sampler.set_epoch(epoch)
-    global global_step, least_loss, loss_file, best_model_name
+    global global_step, least_loss, loss_file, best_model_name, gradient_clip_value
 
     net_g.train()
     net_d.train()
@@ -488,7 +490,7 @@ def train_and_evaluate(
             optim_d.zero_grad()
             scaler.scale(loss_disc_all).backward()
             scaler.unscale_(optim_d)
-            grad_norm_d = commons.clip_grad_value_(net_d.parameters(), None)
+            grad_norm_d = commons.clip_grad_value_(net_d.parameters(), gradient_clip_value, batch_size=hps.train.batch_size)
             scaler.step(optim_d)
 
         with autocast(enabled=hps.train.fp16_run):
@@ -518,7 +520,7 @@ def train_and_evaluate(
             optim_g.zero_grad()
             scaler.scale(loss_gen_all).backward()
             scaler.unscale_(optim_g)
-            grad_norm_g = commons.clip_grad_value_(net_g.parameters(), None)
+            grad_norm_g = commons.clip_grad_value_(net_g.parameters(), gradient_clip_value, batch_size=hps.train.batch_size)
             scaler.step(optim_g)
             scaler.update()
         
