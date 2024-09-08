@@ -2,19 +2,70 @@ import math
 import torch
 from torch.nn import functional as F
 
-def median_pool1d(signal, kernel_size, dim=-1,stride=1):
+def median_pool1d(signal, kernel_size, dim=-1, stride=1):
+    """
+    Apply a 1D median filter along a specified dimension for a 3D tensor.
+
+    Args:
+        signal (torch.Tensor): The input tensor of shape (batch_size, F, T).
+        kernel_size (int): The size of the median filter kernel.
+        dim (int): The dimension along which to apply the median filter.
+        stride (int): The stride of the sliding window.
+
+    Returns:
+        torch.Tensor: The filtered tensor.
+    """
+    # Ensure the input tensor is 3D (batch_size, F, T)
+    if signal.dim() != 3:
+        raise ValueError("Input tensor must be 3D (batch_size, F, T)")
+
+    # Adjust kernel size if larger than input dimension
+    input_size = signal.size(dim)
+    if kernel_size > input_size:
+        kernel_size = input_size
+
     # Pad the input to handle edge cases
     padding = (kernel_size - 1) // 2
+    signal = F.pad(signal, (padding, padding), mode='reflect')
+    if dim == -1:
+        signal = F.pad(signal, (padding, padding), mode='reflect')
+    elif dim == -2:
+        signal = F.pad(signal, (0, 0, padding, padding), mode="reflect")
 
-    input_padded = F.pad(signal, (padding, padding), mode='reflect')
-    
     # Unfold the input to create sliding windows
-    unfolded = input_padded.unfold(-1, kernel_size, stride)
-    
+    unfolded = signal.unfold(dim, kernel_size, stride)
+
     # Compute the median along the last dimension
-    median = unfolded.median(dim=dim).values
-    
+    median = unfolded.median(dim=-1).values
+
     return median
+
+def autocorrelation1d(log_magnitude, max_lag=None):
+    """
+    Computes the autocorrelation of log-magnitude spectrogram.
+    :param log_magnitude: Log magnitude spectrogram (batch, channels, time)
+    :param max_lag: Maximum lag for which to compute autocorrelation.
+    :return: Autocorrelation of the log-magnitude spectrogram.
+    """
+    if max_lag is None:
+        max_lag = log_magnitude.size(-1) // 2  # Default to half the signal length
+
+    # Ensure the signal is zero-mean
+    log_magnitude = log_magnitude - log_magnitude.mean(dim=-1, keepdim=True)
+    
+    # Compute autocorrelation using FFT-based convolution
+    padded_log_magnitude = F.pad(log_magnitude, (max_lag, 0), mode='reflect')
+    
+    # Ensure the kernel has the correct shape for conv1d
+    kernel = log_magnitude
+    padded_log_magnitude = padded_log_magnitude
+    
+    autocorr = F.conv1d(padded_log_magnitude, kernel, groups=log_magnitude.size(1))
+    
+    # Take only the relevant part
+    autocorr = F.normalize(autocorr[:,:max_lag + 1], p=2, dim=-1)
+    
+    return autocorr.nan_to_num(0)
 
 def init_weights(m, mean=0.0, std=0.01):
     classname = m.__class__.__name__
@@ -179,3 +230,7 @@ def clip_grad_value_(parameters, clip_value, norm_type=2, batch_size=1):
             p.grad.data.clamp_(min=-clip_value, max=clip_value)
     total_norm = total_norm ** (1.0 / norm_type)
     return total_norm
+
+def serialize_tensor(tensor):
+    if hasattr(tensor,"item"): return tensor.item()
+    else: return float(f"{float(tensor):.3f}")

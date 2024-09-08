@@ -105,6 +105,7 @@ def load_checkpoint(checkpoint_path, model, optimizer=None, load_opt=1):
 
     iteration = checkpoint_dict["iteration"]
     learning_rate = checkpoint_dict["learning_rate"]
+    kwargs = checkpoint_dict.get("kwargs", {})
     if (
         optimizer is not None and load_opt == 1
     ):  ###加载不了，如果是空的的话，重新初始化，可能还会影响lr时间表的更新，因此在train文件最外围catch
@@ -113,15 +114,11 @@ def load_checkpoint(checkpoint_path, model, optimizer=None, load_opt=1):
     #   except:
     #     traceback.print_exc()
     logger.info("Loaded checkpoint '{}' (epoch {})".format(checkpoint_path, iteration))
-    return model, optimizer, learning_rate, iteration
+    return model, optimizer, learning_rate, iteration, kwargs
 
 
-def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint_path):
-    logger.info(
-        "Saving model and optimizer state at epoch {} to {}".format(
-            iteration, checkpoint_path
-        )
-    )
+def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint_path, **kwargs):
+    logger.info(f"Saving model and optimizer state at epoch {iteration} to {checkpoint_path}")
     if hasattr(model, "module"):
         state_dict = model.module.state_dict()
     else:
@@ -132,6 +129,7 @@ def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint_path)
             "iteration": iteration,
             "optimizer": optimizer.state_dict(),
             "learning_rate": learning_rate,
+            "kwargs": kwargs
         },
         checkpoint_path,
     )

@@ -246,7 +246,7 @@ class RVCProcessDatasetNode:
         assert dataset, "Please upload a dataset!"
         
         f0_method = pitch_extraction_params.get("f0_method", "")
-        cached_params = [model_name, dataset, period, overlap, max_volume, mute_ratio, sr, f0_method, audio_processor]
+        cached_params = [dataset, period, overlap, max_volume, mute_ratio, sr, f0_method, audio_processor]
         crepe_hop_length = pitch_extraction_params.get("crepe_hop_length",160)
 
         if "crepe" in f0_method: cached_params.append(crepe_hop_length)
@@ -367,6 +367,7 @@ class RVCTrainParamsNode:
                 c_hd=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
                 c_sts=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
                 c_gp=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
+                use_balancer=("BOOLEAN",dict(default=False))
             )
         }
 
@@ -377,8 +378,7 @@ class RVCTrainParamsNode:
 
     CATEGORY = CATEGORY
 
-    def init(self,batch_size=4,c_mel=45,c_kl=1.,c_fm=1.,c_mfcc=0.,c_lfcc=0.,c_hd=0.,c_sts=0.,c_gp=0.,):
-        return (dict(batch_size=batch_size,c_mel=c_mel,c_kl=c_kl,c_fm=c_fm,c_mfcc=c_mfcc,c_gp=c_gp,c_lfcc=c_lfcc,c_hd=c_hd,c_sts=c_sts),)
+    def init(self,**kwargs): return (kwargs,)
 
 class RVCTrainModelNode:
     
@@ -407,7 +407,7 @@ class RVCTrainModelNode:
                 train_index=("BOOLEAN",{"default": True}),
                 retrain=("BOOLEAN",{"default": False}),
                 save_best_model=("BOOLEAN",{"default": True}),
-                best_model_threshold=("INT",dict(default=50,min=20,max=80)),
+                best_model_threshold=("INT",dict(default=30,min=10,max=50)),
                 log_every_epoch=("FLOAT",dict(default=1.,min=0.,max=2.,step=.1)),
                 num_workers=("INT",dict(default=1,min=1,max=16))
             )
@@ -443,7 +443,7 @@ class RVCTrainModelNode:
         sample_rate = rvc_dataset_pipe["sample_rate"]
         name = rvc_dataset_pipe["name"]
         dataset_dir = rvc_dataset_pipe["dataset_dir"]
-        cache_name = get_hash(pretrained_G,pretrained_D,*rvc_training_params.items())
+        cache_name = get_hash(dataset_dir,pretrained_G,pretrained_D,*rvc_training_params.items())
         model_dir = os.path.join(output_path,"logs",cache_name)
         if_f0 = rvc_dataset_pipe["if_f0"]
 
@@ -470,8 +470,8 @@ class RVCTrainModelNode:
         hparams.save_best_model = save_best_model
         hparams.best_model_threshold = best_model_threshold
         hparams.log_every_epoch = log_every_epoch
-        hparams.train.num_workers = num_workers
         hparams.train.update(rvc_training_params)
+        hparams.train.num_workers = num_workers
 
         file_index = self.train_index(dataset_dir, sample_rate, name) if train_index else None
         model_path = os.path.join(BASE_MODELS_DIR,"RVC",f"{name}_{sample_rate}.pth")

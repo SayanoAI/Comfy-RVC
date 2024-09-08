@@ -30,7 +30,7 @@ from .lib.train.data_utils import (
     TextAudioCollate,
     DistributedBucketSampler,
 )
-from .lib.train.losses import combined_aux_loss, generator_loss, discriminator_loss, feature_loss, gradient_norm_loss, kl_loss
+from .lib.train.losses import LossBalancer, combined_aux_loss, generator_loss, discriminator_loss, feature_loss, gradient_norm_loss, kl_loss
 from .lib.train.mel_processing import mel_spectrogram_torch, spec_to_mel_torch
 
 def save_checkpoint(ckpt, name, epoch, hps, model_path=None):
@@ -235,33 +235,27 @@ def run(rank, n_gpus, hps, device):
         net_d = DDP(net_d)
 
     try:  # resume training
-        _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "D_*.pth"), net_d, optim_d)
+        _, _, _, epoch_str, d_kwargs = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "D_*.pth"), net_d, optim_d)
         if rank == 0: logger.info("loaded D")
         
-        _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "G_*.pth"), net_g, optim_g)
+        _, _, _, epoch_str, g_kwargs = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "G_*.pth"), net_g, optim_g)
         if rank == 0: logger.info("loaded G")
 
         global_step = (epoch_str - 1) * len(train_loader)
-    except:  # 如果首次不能加载，加载pretrain
-        # traceback.print_exc()
+
+    except Exception as e:
+        logger.error(f"Failed to load saved pretrains: {e}")
         epoch_str = 1
         global_step = 0
         if hps.pretrainG != "":
             if rank == 0:
                 logger.info("loaded pretrained %s" % (hps.pretrainG))
-            print(
-                net_g.module.load_state_dict(
-                    torch.load(hps.pretrainG, map_location="cpu")["model"]
-                )
-            )  ##测试不加载优化器
+            print(net_g.module.load_state_dict(torch.load(hps.pretrainG, map_location="cpu")["model"]))
         if hps.pretrainD != "":
             if rank == 0:
                 logger.info("loaded pretrained %s" % (hps.pretrainD))
-            print(
-                net_d.module.load_state_dict(
-                    torch.load(hps.pretrainD, map_location="cpu")["model"]
-                )
-            )
+            print(net_d.module.load_state_dict(torch.load(hps.pretrainD, map_location="cpu")["model"]))
+        d_kwargs = g_kwargs = {}
 
     scheduler_g = torch.optim.lr_scheduler.ExponentialLR(
         optim_g, gamma=hps.train.lr_decay, last_epoch=epoch_str - 2
@@ -272,6 +266,22 @@ def run(rank, n_gpus, hps, device):
 
     scaler = GradScaler(enabled=hps.train.fp16_run)
 
+    try:
+        balancer_state = g_kwargs["balancer"]
+        logger.info(f"Using existing balancer: {balancer_state}")
+        balancer = LossBalancer(net_g,**balancer_state)
+    except Exception as e:
+        logger.error(f"Failed to load balancer state: {e}")
+        balancer = LossBalancer(
+            net_g,
+            use_partial=True,
+            weights_decay=.5 / (1 + np.exp(-10 * (epoch_str / hps.total_epoch - 0.16)))+.5, #sigmoid scaled ema .8 at 20% epoch
+            loss_decay=.8,
+            epsilon=hps.train.eps,
+            active=hps.train.get("use_balancer",False),
+            use_pareto=True,
+            use_norm=hps.train.get("c_gp",0)>0
+            )
     cache = []
     for epoch in range(epoch_str, hps.train.epochs + 1):
         if rank == 0:
@@ -287,6 +297,7 @@ def run(rank, n_gpus, hps, device):
                 logger,
                 [writer, writer_eval],
                 cache,
+                balancer
             )
         else:
             train_and_evaluate(
@@ -301,13 +312,14 @@ def run(rank, n_gpus, hps, device):
                 None,
                 None,
                 cache,
+                balancer
             )
         scheduler_g.step()
         scheduler_d.step()
 
 
 def train_and_evaluate(
-    rank, epoch, hps, nets, optims, _, scaler, loaders, logger, writers, cache
+    rank, epoch, hps, nets, optims, _, scaler, loaders, logger, writers, cache, balancer: "LossBalancer"
 ):
     net_g, net_d = nets
     optim_g, optim_d = optims
@@ -497,25 +509,38 @@ def train_and_evaluate(
             # Generator
             y_d_hat_r, y_d_hat_g, fmap_r, fmap_g = net_d(wave, y_hat)
             with autocast(enabled=False):
-                loss_mel = F.l1_loss(y_mel, y_hat_mel) * hps.train.get("c_mel",45.)
-                loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask) * hps.train.get("c_kl",1.)
-                loss_fm = feature_loss(fmap_r, fmap_g) * hps.train.get("c_fm",2.)
+                loss_mel = F.l1_loss(y_mel, y_hat_mel)*hps.train.c_mel if hps.train.get("c_mel",0.)>0 else 0 #default 45
+                loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask)*hps.train.c_kl if hps.train.get("c_kl",0.)>0 else 0 #default 1
+                loss_fm = feature_loss(fmap_r, fmap_g)*hps.train.c_fm if hps.train.get("c_fm",0.)>0 else 0 #default 2
                 harmonic_loss, temporal_loss, spectral_loss, mfcc_loss, lfcc_loss, phase_loss = combined_aux_loss(
                     wave, y_hat, SR_MAP[hps.sample_rate],
-                    c_lfcc=hps.train.get("c_lfcc",0.),
-                    c_mfcc=hps.train.get("c_mfcc",0.),
-                    c_hd=hps.train.get("c_hd",0.),
-                    c_sts=hps.train.get("c_sts",0.),
+                    c_lfcc=hps.train.c_lfcc if hps.train.get("c_lfcc",0.)>0 else 0.,
+                    c_mfcc=hps.train.c_mfcc if hps.train.get("c_mfcc",0.)>0 else 0.,
+                    c_hd=hps.train.c_hd if hps.train.get("c_hd",0.)>0 else 0.,
+                    c_sts=hps.train.c_sts if hps.train.get("c_sts",0.)>0 else 0.,
                     n_fft=hps.data.filter_length,
                     hop_length=hps.data.hop_length,
                     win_length=hps.data.win_length,
                     n_filter=hps.data.n_mel_channels,
                     f_min=hps.data.mel_fmin,
-                    f_max=hps.data.mel_fmax
+                    f_max=hps.data.mel_fmax,
+                    eps=hps.train.eps
                 )
                 loss_gen, losses_gen = generator_loss(y_d_hat_g)
                 aux_loss = harmonic_loss + temporal_loss + spectral_loss + mfcc_loss + lfcc_loss + phase_loss
-                loss_gen_all = loss_gen + loss_fm + loss_mel + loss_kl + aux_loss
+                # loss_gen_all = loss_gen + loss_fm + loss_mel + loss_kl + aux_loss
+                loss_gen_all = balancer.on_train_batch_start(dict(
+                    loss_gen=loss_gen,
+                    loss_fm=loss_fm,
+                    loss_mel=loss_mel,
+                    loss_kl=loss_kl,
+                    harmonic_loss=harmonic_loss,
+                    temporal_loss=temporal_loss,
+                    spectral_loss=spectral_loss,
+                    phase_loss=phase_loss,
+                    mfcc_loss=mfcc_loss,
+                    lfcc_loss=lfcc_loss
+                    ))
                 
             optim_g.zero_grad()
             scaler.scale(loss_gen_all).backward()
@@ -526,8 +551,8 @@ def train_and_evaluate(
         
         if rank == 0:
             # if epoch>=max(hps.total_epoch*.2,20): #start saving best model after 20% or 20 epochs
-            if loss_gen_all+loss_disc_all<least_loss:
-                least_loss = loss_gen_all+loss_disc_all
+            if loss_gen + loss_fm + loss_mel + loss_kl + aux_loss<least_loss:
+                least_loss = loss_gen + loss_fm + loss_mel + loss_kl + aux_loss
                 logger.info(f"[lowest loss] {least_loss=:.3f}: {loss_disc=:.3f} {gradient_penalty=:.3f} <==> {loss_gen=:.3f} {loss_fm=:.3f} {loss_mel=:.3f} {loss_kl=:.3f}")
                 logger.info(f"[aux] {aux_loss=:.3f}: {harmonic_loss=:.3f}, {temporal_loss=:.3f}, {spectral_loss=:.3f}, {mfcc_loss=:.3f}, {lfcc_loss=:.3f} {phase_loss=:.3f}")
 
@@ -535,16 +560,37 @@ def train_and_evaluate(
                     if hasattr(net_g, "module"): ckpt = net_g.module.state_dict()
                     else: ckpt = net_g.state_dict()
                     
-                    best_model_name = f"{hps.name}_e{epoch}_s{global_step}_loss{least_loss:2.0f}" if hps.save_every_weights else f"{hps.name}_loss{least_loss:2.0f}"
+                    best_model_name = f"{hps.name}_e{epoch}_s{global_step}_loss{least_loss:.0f}" if hps.save_every_weights else f"{hps.name}_loss{least_loss:2.0f}"
                     status = save_checkpoint(ckpt,best_model_name,epoch,hps)
                     logger.info(f"=== saving best model {best_model_name}: {status=} ===")
                 
                 with open(loss_file,"w") as f:
-                    json.dump(dict(least_loss=least_loss.item(),best_model_name=best_model_name),f)
+                    json.dump(dict(least_loss=least_loss.item(),best_model_name=best_model_name,epoch=epoch,steps=global_step,
+                                   loss_weights = dict(balancer.ema_weights),
+                                   scalar_dict={
+                                       "total/loss/all": commons.serialize_tensor(loss_gen_all+loss_disc_all),
+                                        "total/loss/gen_all": commons.serialize_tensor(loss_gen_all),
+                                        "total/loss/aux": commons.serialize_tensor(aux_loss),
+                                        "total/loss/disc_all": commons.serialize_tensor(loss_disc_all),
+                                        "total/loss/gen": commons.serialize_tensor(loss_gen),
+                                        "total/loss/disc": commons.serialize_tensor(loss_disc),
+                                        "total/loss/fm": commons.serialize_tensor(loss_fm),
+                                        "total/loss/mel": commons.serialize_tensor(loss_mel),
+                                        "total/loss/kl": commons.serialize_tensor(loss_kl),
+                                        "aux/loss/harmonic": commons.serialize_tensor(harmonic_loss),
+                                        "aux/loss/temporal": commons.serialize_tensor(temporal_loss),
+                                        "aux/loss/spectral": commons.serialize_tensor(spectral_loss),
+                                        "aux/loss/mfcc": commons.serialize_tensor(mfcc_loss),
+                                        "aux/loss/lfcc": commons.serialize_tensor(lfcc_loss),
+                                        "aux/loss/phase_loss": commons.serialize_tensor(phase_loss),
+                                        "gradient/grad_norm_disc": commons.serialize_tensor(grad_norm_d),
+                                        "gradient/grad_norm_gen": commons.serialize_tensor(grad_norm_g),
+                                        "gradient/gradient_penalty": commons.serialize_tensor(gradient_penalty),
+                                   }),f,indent=2)
 
             if hps.train.log_interval>0 and global_step % hps.train.log_interval == 0:
                 lr = optim_g.param_groups[0]["lr"]
-                logger.info(f"Train Epoch: {epoch} [{100.0 * epoch / hps.total_epoch:.2f}% complete]")
+                logger.info(f"Train Epoch: {epoch} [{100.0 * (epoch-1) / hps.total_epoch:.2f}% complete]")
                 # Amor For Tensorboard display
                 if loss_mel > 75:
                     loss_mel = 75
@@ -612,6 +658,7 @@ def train_and_evaluate(
             hps.train.learning_rate,
             epoch,
             os.path.join(hps.model_dir, f"G_{saved_epoch}.pth"),
+            balancer=balancer.to_dict()
         )
         utils.save_checkpoint(
             net_d,
@@ -631,6 +678,7 @@ def train_and_evaluate(
         logger.info(f"|| {loss_disc_all=:.3f}: {loss_disc=:.3f}, {gradient_penalty=:.3f}")
         logger.info(f"|| {loss_gen_all=:.3f}: {loss_gen=:.3f}, {loss_fm=:.3f}, {loss_mel=:.3f}, {loss_kl=:.3f}")
         logger.info(f"|| {harmonic_loss=:.3f}, {temporal_loss=:.3f}, {spectral_loss=:.3f}, {mfcc_loss=:.3f}, {lfcc_loss=:.3f}, {phase_loss=:.3f}")
+        balancer.on_epoch_end(.5 / (1 + np.exp(-10 * (epoch / hps.total_epoch - 0.16)))+.5) #sigmoid scaling of ema
 
     if epoch >= hps.total_epoch and rank == 0:
         logger.info("Training is done. The program is closed.")
@@ -644,7 +692,7 @@ def train_and_evaluate(
                 if os.path.isfile(best_model_path):
                     shutil.copy(best_model_path,os.path.join(
                         os.path.dirname(hps.model_path),
-                        f"{os.path.basename(hps.model_path).split('.')[0]}-best.pth"))
+                        f"{os.path.basename(hps.model_path).split('.')[0]}-lowest.pth"))
 
         status = save_checkpoint(ckpt,hps.name,epoch,hps,model_path=hps.model_path)
         logger.info(f"saving final ckpt {hps.model_path}: {status}")
