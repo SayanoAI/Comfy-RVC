@@ -16,10 +16,9 @@ DEFAULT_TRAINING_PARAMS = dict(
     c_kl=1.,
     c_fm=2.,
     c_gp=0.,
-    c_mfcc=0.,
-    c_lfcc=0.,
+    c_tefs=0.,
     c_hd=0.,
-    c_sts=0.
+    c_tsi=0.
 )
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)

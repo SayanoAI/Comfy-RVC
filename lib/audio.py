@@ -133,7 +133,7 @@ def load_audio(file, sr, **kwargs):
 
     return remix_audio((np.frombuffer(out, np.float32).flatten(), sr),**kwargs)
 
-def remix_audio(input_audio,target_sr=None,norm=False,to_int16=False,resample=False,axis=0,merge_type=None,max_volume=.99,**kwargs):
+def remix_audio(input_audio,target_sr=None,norm=False,to_int16=False,resample=False,axis=0,merge_type=None,max_volume=.95,**kwargs):
     audio = np.array(input_audio[0],dtype="float32")
     if target_sr is None: target_sr=input_audio[1]
 

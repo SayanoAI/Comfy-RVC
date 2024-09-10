@@ -273,14 +273,13 @@ def run(rank, n_gpus, hps, device):
     except Exception as e:
         logger.error(f"Failed to load balancer state: {e}")
         balancer = LossBalancer(
-            net_g,
-            use_partial=True,
+            net_g,            
             weights_decay=.5 / (1 + np.exp(-10 * (epoch_str / hps.total_epoch - 0.16)))+.5, #sigmoid scaled ema .8 at 20% epoch
             loss_decay=.8,
             epsilon=hps.train.eps,
             active=hps.train.get("use_balancer",False),
-            use_pareto=True,
-            use_norm=hps.train.get("c_gp",0)>0
+            use_pareto=hps.train.get("use_pareto",False),
+            use_norm=not hps.train.get("fast_mode",False)
             )
     cache = []
     for epoch in range(epoch_str, hps.train.epochs + 1):
@@ -495,7 +494,7 @@ def train_and_evaluate(
             y_d_hat_r, y_d_hat_g, _, _ = net_d(wave, gen_wave)
             
             with autocast(enabled=False):
-                gradient_penalty = gradient_norm_loss(wave,gen_wave, net_d)*hps.train.c_gp if hps.train.get("c_gp",0.)>0 else 0
+                gradient_penalty = gradient_norm_loss(wave,gen_wave, net_d, eps=hps.train.eps)*hps.train.c_gp if hps.train.get("c_gp",0.)>0 else 0
                 loss_disc, losses_disc_r, losses_disc_g = discriminator_loss(y_d_hat_r, y_d_hat_g)
                 loss_disc_all = loss_disc+gradient_penalty
 
@@ -512,22 +511,18 @@ def train_and_evaluate(
                 loss_mel = F.l1_loss(y_mel, y_hat_mel)*hps.train.c_mel if hps.train.get("c_mel",0.)>0 else 0 #default 45
                 loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask)*hps.train.c_kl if hps.train.get("c_kl",0.)>0 else 0 #default 1
                 loss_fm = feature_loss(fmap_r, fmap_g)*hps.train.c_fm if hps.train.get("c_fm",0.)>0 else 0 #default 2
-                harmonic_loss, temporal_loss, spectral_loss, mfcc_loss, lfcc_loss, phase_loss = combined_aux_loss(
-                    wave, y_hat, SR_MAP[hps.sample_rate],
-                    c_lfcc=hps.train.c_lfcc if hps.train.get("c_lfcc",0.)>0 else 0.,
-                    c_mfcc=hps.train.c_mfcc if hps.train.get("c_mfcc",0.)>0 else 0.,
+                harmonic_loss, tefs_loss, tsi_loss = combined_aux_loss(
+                    wave, y_hat,n_mels=hps.data.n_mel_channels,sample_rate=hps.data.sampling_rate,
+                    c_tefs=hps.train.c_tefs if hps.train.get("c_tefs",0.)>0 else 0.,
                     c_hd=hps.train.c_hd if hps.train.get("c_hd",0.)>0 else 0.,
-                    c_sts=hps.train.c_sts if hps.train.get("c_sts",0.)>0 else 0.,
+                    c_tsi=hps.train.c_tsi if hps.train.get("c_tsi",0.)>0 else 0.,
                     n_fft=hps.data.filter_length,
                     hop_length=hps.data.hop_length,
                     win_length=hps.data.win_length,
-                    n_filter=hps.data.n_mel_channels,
-                    f_min=hps.data.mel_fmin,
-                    f_max=hps.data.mel_fmax,
                     eps=hps.train.eps
                 )
                 loss_gen, losses_gen = generator_loss(y_d_hat_g)
-                aux_loss = harmonic_loss + temporal_loss + spectral_loss + mfcc_loss + lfcc_loss + phase_loss
+                aux_loss = harmonic_loss + tefs_loss + tsi_loss
                 # loss_gen_all = loss_gen + loss_fm + loss_mel + loss_kl + aux_loss
                 loss_gen_all = balancer.on_train_batch_start(dict(
                     loss_gen=loss_gen,
@@ -535,11 +530,8 @@ def train_and_evaluate(
                     loss_mel=loss_mel,
                     loss_kl=loss_kl,
                     harmonic_loss=harmonic_loss,
-                    temporal_loss=temporal_loss,
-                    spectral_loss=spectral_loss,
-                    phase_loss=phase_loss,
-                    mfcc_loss=mfcc_loss,
-                    lfcc_loss=lfcc_loss
+                    tsi_loss=tsi_loss,
+                    tefs_loss=tefs_loss,
                     ))
                 
             optim_g.zero_grad()
@@ -554,7 +546,7 @@ def train_and_evaluate(
             if loss_gen + loss_fm + loss_mel + loss_kl + aux_loss<least_loss:
                 least_loss = loss_gen + loss_fm + loss_mel + loss_kl + aux_loss
                 logger.info(f"[lowest loss] {least_loss=:.3f}: {loss_disc=:.3f} {gradient_penalty=:.3f} <==> {loss_gen=:.3f} {loss_fm=:.3f} {loss_mel=:.3f} {loss_kl=:.3f}")
-                logger.info(f"[aux] {aux_loss=:.3f}: {harmonic_loss=:.3f}, {temporal_loss=:.3f}, {spectral_loss=:.3f}, {mfcc_loss=:.3f}, {lfcc_loss=:.3f} {phase_loss=:.3f}")
+                logger.info(f"[aux] {aux_loss=:.3f}: {harmonic_loss=:.3f}, {tefs_loss=:.3f}, {tsi_loss=:.3f}")
 
                 if hps.save_best_model:
                     if hasattr(net_g, "module"): ckpt = net_g.module.state_dict()
@@ -578,11 +570,8 @@ def train_and_evaluate(
                                         "total/loss/mel": commons.serialize_tensor(loss_mel),
                                         "total/loss/kl": commons.serialize_tensor(loss_kl),
                                         "aux/loss/harmonic": commons.serialize_tensor(harmonic_loss),
-                                        "aux/loss/temporal": commons.serialize_tensor(temporal_loss),
-                                        "aux/loss/spectral": commons.serialize_tensor(spectral_loss),
-                                        "aux/loss/mfcc": commons.serialize_tensor(mfcc_loss),
-                                        "aux/loss/lfcc": commons.serialize_tensor(lfcc_loss),
-                                        "aux/loss/phase_loss": commons.serialize_tensor(phase_loss),
+                                        "aux/loss/tefs": commons.serialize_tensor(tefs_loss),
+                                        "aux/loss/tsi": commons.serialize_tensor(tsi_loss),
                                         "gradient/grad_norm_disc": commons.serialize_tensor(grad_norm_d),
                                         "gradient/grad_norm_gen": commons.serialize_tensor(grad_norm_g),
                                         "gradient/gradient_penalty": commons.serialize_tensor(gradient_penalty),
@@ -608,11 +597,8 @@ def train_and_evaluate(
                     "total/loss/mel": loss_mel,
                     "total/loss/kl": loss_kl,
                     "aux/loss/harmonic": harmonic_loss,
-                    "aux/loss/temporal": temporal_loss,
-                    "aux/loss/spectral": spectral_loss,
-                    "aux/loss/mfcc": mfcc_loss,
-                    "aux/loss/lfcc": lfcc_loss,
-                    "aux/loss/phase_loss": phase_loss,
+                    "aux/loss/tefs": tefs_loss,
+                    "aux/loss/tsi": tsi_loss,
                     "gradient/lr": lr,
                     "gradient/grad_norm_disc": grad_norm_d,
                     "gradient/grad_norm_gen": grad_norm_g,
@@ -677,7 +663,7 @@ def train_and_evaluate(
         logger.info(f"====> Epoch {epoch} (Total Loss={(loss_disc_all+loss_gen_all).item():.3f}): {global_step=} {lr=:.2E} {epoch_recorder.record()}")
         logger.info(f"|| {loss_disc_all=:.3f}: {loss_disc=:.3f}, {gradient_penalty=:.3f}")
         logger.info(f"|| {loss_gen_all=:.3f}: {loss_gen=:.3f}, {loss_fm=:.3f}, {loss_mel=:.3f}, {loss_kl=:.3f}")
-        logger.info(f"|| {harmonic_loss=:.3f}, {temporal_loss=:.3f}, {spectral_loss=:.3f}, {mfcc_loss=:.3f}, {lfcc_loss=:.3f}, {phase_loss=:.3f}")
+        logger.info(f"|| {harmonic_loss=:.3f}, {tefs_loss=:.3f}, {tsi_loss=:.3f}")
         balancer.on_epoch_end(.5 / (1 + np.exp(-10 * (epoch / hps.total_epoch - 0.16)))+.5) #sigmoid scaling of ema
 
     if epoch >= hps.total_epoch and rank == 0:

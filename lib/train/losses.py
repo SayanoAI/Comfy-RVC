@@ -1,14 +1,14 @@
 import torch
-import torchaudio
+import torchaudio.transforms as T
 import torch.nn.functional as F
 
 from ..utils import gc_collect
-from ..infer_pack.commons import median_pool1d, autocorrelation1d
+from ..infer_pack.commons import median_pool1d, minmax_scale
 
 class LossBalancer:
     model: torch.nn.Module
 
-    def __init__(self, model, initial_weights={}, historical_losses={}, ema_weights={}, epsilon=1e-8, weights_decay=0., loss_decay=.0, active=True, use_partial=False, use_pareto=True, use_norm=False):
+    def __init__(self, model, initial_weights={}, historical_losses={}, ema_weights={}, epsilon=1e-8, weights_decay=0., loss_decay=.0, active=True, use_pareto=True, use_norm=False):
         """
         Initializes the LossBalancer with optional initial weights, partial gradient computation, and EMA.
         
@@ -20,7 +20,6 @@ class LossBalancer:
         """
         self.model = model
         self.epsilon = epsilon
-        self.use_partial = use_partial
         self.weights_decay = weights_decay
         self.loss_decay = loss_decay
         self.initial_weights = initial_weights
@@ -34,7 +33,6 @@ class LossBalancer:
     def to_dict(self):
         return dict(
             epsilon = self.epsilon,
-            use_partial = self.use_partial,
             weights_decay = self.weights_decay,
             loss_decay = self.loss_decay,
             ema_weights = self.ema_weights,
@@ -53,33 +51,32 @@ class LossBalancer:
                 for k in new_weights
             }
     
-    def update_historical_losses(self, new_losses):
+    def update_historical_losses(self, new_losses: dict):
         """Updates the EMA of the weights."""
         if not self.historical_losses: self.historical_losses = new_losses
-        else: self.historical_losses = {
-                k: self.loss_decay * self.historical_losses.get(k, 0.) + (1 - self.loss_decay) * new_losses[k]
-                for k in new_losses
-            }
+        else: 
+            for k in new_losses:
+                self.historical_losses[k]=self.loss_decay*self.historical_losses.get(k, 0.) + (1 - self.loss_decay)*new_losses[k]
+                
 
     def calculate_loss_slope(self, key, current_loss):
         """Calculates the slope of the loss using the current loss and its EMA."""
         ema_loss = self.historical_losses.get(key, current_loss)+self.epsilon
-        slope = abs((current_loss-ema_loss)/ema_loss)  # relative loss change
-        if slope>1: slope*=slope # punish large changes
+        slope = abs(current_loss-ema_loss)/ema_loss  # relative loss change
         return slope
     
-    def calculate_gradients(self, current_loss):
+    def calculate_gradients(self, key, current_loss):
         """Calculates the gradient norm of the current loss wrt the model params."""
         self.model.zero_grad()  # Clear previous gradients
 
-        # Backward pass with partial or full gradient computation
-        model_params = list(self.model.parameters())[-1] if self.use_partial else self.model.parameters()
-        output_params = torch.autograd.grad([current_loss], [model_params], retain_graph=True, only_inputs=True)
+        # Backward pass to output layer
+        model_params = list(self.model.parameters())[-1]
+        output_params = torch.autograd.grad(current_loss, model_params, grad_outputs=torch.ones_like(current_loss, device=model_params.device), retain_graph=True, only_inputs=True)[0]
 
         # Compute L2 gradient norm
-        grad_norm = torch.stack([param.norm() for param in output_params if hasattr(param, "norm")]).norm(2)
-        del output_params
-        return grad_norm
+        grad_norm = output_params.view(output_params.size(0),-1).norm(2, dim=-1)
+        ema_loss = self.historical_losses.get(key, current_loss)+self.epsilon
+        return grad_norm/ema_loss
 
     def pareto_normalizer(self, data: dict):
         # Sort the data in descending order based on the values
@@ -136,7 +133,7 @@ class LossBalancer:
 
             if self.use_norm:
                 # Compute L2 gradient norm
-                grad_norm = self.calculate_gradients(loss)
+                grad_norm = self.calculate_gradients(key, loss)
                 gradients[key] = grad_norm.item()
             else:
                 # Use loss plateau detection with EMA
@@ -155,10 +152,12 @@ class LossBalancer:
 
         # Update EMA weights
         self.update_ema_weights(normalized_weights)
-        balanced_loss = sum(self.ema_weights[k] * loss for k, loss in valid_losses.items())
-        
-        # update historical losses
-        self.update_historical_losses({k: v.item() for k,v in valid_losses.items()})
+        balanced_loss = 0
+        for k, loss in valid_losses.items():
+            balanced_loss += self.ema_weights[k] * loss
+            
+            # update historical losses
+            self.update_historical_losses({k: loss.item()})
         
         return balanced_loss
 
@@ -175,57 +174,99 @@ class LossBalancer:
         gc_collect()
 
 
-def compute_phase_loss(original_log_magnitude, generated_log_magnitude, max_lag=None):
+def compute_tsi_loss(original_log_magnitude: torch.Tensor, generated_log_magnitude: torch.Tensor, dim=-1, eps=1e-8):
     """
-    Computes a time-shift invariant loss based on autocorrelation for log-magnitude data.
-    :param original_log_magnitude: Original log-magnitude spectrogram (batch, channels, time)
-    :param generated_log_magnitude: Generated log-magnitude spectrogram (batch, channels, time)
-    :param max_lag: Maximum lag for which to compute autocorrelation.
-    :return: Loss value.
+    Computes the correlation loss between the original and generated log-magnitude spectrograms.
+    :param original_envelope: Original log magnitude spectrogram (batch, time)
+    :param generated_envelope: Generated log magnitude spectrogram (batch, time)
+    :return: Correlation loss.
     """
-    # Compute autocorrelations
-    original_autocorr = autocorrelation1d(original_log_magnitude, max_lag)
-    generated_autocorr = autocorrelation1d(generated_log_magnitude, max_lag)
+    original_envelope = compute_envelope(original_log_magnitude, eps=eps, dim=dim)
+    generated_envelope = compute_envelope(generated_log_magnitude, eps=eps, dim=dim)
 
-    # Compute the loss between autocorrelations
-    loss = F.smooth_l1_loss(generated_autocorr, original_autocorr)
+    # Normalize the envelope
+    original_envelope = minmax_scale(original_envelope, eps=eps)
+    generated_envelope = minmax_scale(generated_envelope, eps=eps)
+    
+    # Compute the correlation
+    numerator = (original_envelope * generated_envelope).sum(dim=-1)
+    denominator = torch.sqrt((original_envelope ** 2).sum(dim=-1) * (generated_envelope ** 2).sum(dim=-1)+eps)
+    correlation = numerator / denominator
+    
+    # Compute the loss as negative correlation
+    loss = 1-correlation.mean()
     
     return loss
 
-def compute_envelope(log_magnitude: torch.Tensor, dim=-1, kernel_size=3):
+def compute_envelope(log_magnitude: torch.Tensor, dim=-1, kernel_size=3, eps=1e-8):
+    """
+    Compute the envelope of the log-magnitude spectrum of an audio signal.
 
-    # average over axis
-    pooled_magnitude = log_magnitude.mean(dim)
+    Args:
+        log_magnitude (torch.Tensor): The log-magnitude spectrum of the audio signal.
+        dim (int): The dimension along which to average. Default is -1.
+        kernel_size (int): The size of the max pooling kernel. Default is 3.
 
-    # use max pool to get the peaks
-    max_filtered_tensor = F.max_pool1d(pooled_magnitude, kernel_size=kernel_size, stride=1, padding=kernel_size//2)
+    Returns:
+        torch.Tensor: The computed envelope of the log-magnitude spectrum.
+    """
+
+    # Normalize the pooled magnitude
+    log_magnitude = F.normalize(log_magnitude, dim=dim, eps=eps)
+
+    # Use max pooling to get the peaks
+    max_filtered_tensor = F.max_pool1d(log_magnitude, kernel_size=kernel_size, stride=1, padding=kernel_size//2)
+
+    # Replace NaNs with zeros and sum along the second-to-last dimension
+    return max_filtered_tensor.nan_to_num(0).sum(dim)
+
+def compute_tefs(audio_signal: torch.Tensor, eps=1e-8):
+    """
+    Computes the Hilbert transform of a batched mono audio signal to extract the envelope.
     
-    return max_filtered_tensor.nan_to_num(0).sum(-2)
+    Args:
+        audio_signal (torch.Tensor): Batched mono audio signal of shape (batch_size, signal_length).
+        
+    Returns:
+        torch.Tensor: The envelope of the audio signal of shape (batch_size, signal_length).
+    """
+    # Perform FFT on the input signal
+    audio_fft = torch.fft.fft(audio_signal.float(), dim=-1)
 
-def compute_sts_loss(gen_stft: torch.Tensor, org_stft: torch.Tensor,eps=1e-6):
+    # Create a filter to zero out negative frequencies
+    signal_length = audio_signal.shape[-1]
+    h = torch.zeros(signal_length, device=audio_signal.device)
     
-    # B?N?T
-    org_mag = torch.log10(org_stft.abs()+eps)
-    gen_mag = torch.log10(gen_stft.abs()+eps)
+    # First component is left untouched
+    h[0] = 1
+    
+    if signal_length % 2 == 0:
+        # For even signal length
+        h[1:signal_length // 2] = 2
+        h[signal_length // 2] = 1
+    else:
+        # For odd signal length
+        h[1:(signal_length + 1) // 2] = 2
 
-    # temporal invariant phase
-    phase_loss = compute_phase_loss(org_mag.sum(-2,keepdim=True),gen_mag.sum(-2,keepdim=True))
+    # Apply the filter in the frequency domain
+    hilbert_fft = audio_fft * h
 
-    # temporal envelope
-    gen_temp = compute_envelope(gen_mag,dim=-2,kernel_size=3)
-    org_temp = compute_envelope(org_mag,dim=-2,kernel_size=3)
-    temporal_loss = F.smooth_l1_loss(gen_temp, org_temp)
+    # Perform inverse FFT to obtain the analytic signal
+    analytic_signal = torch.fft.ifft(hilbert_fft, dim=-1)
 
-    # spectral
-    gen_spec = compute_envelope(gen_mag,dim=-1,kernel_size=3)
-    org_spec = compute_envelope(org_mag,dim=-1,kernel_size=3)
-    spectral_loss = F.smooth_l1_loss(gen_spec, org_spec)
+    # Extract the envelope by taking the magnitude of the analytic signal
+    envelope = torch.abs(analytic_signal)
 
-    return temporal_loss, spectral_loss, phase_loss
+    # Normalize the envelope
+    envelope = minmax_scale(envelope, eps=eps)
 
-def compute_harmonics(stft_matrix: torch.Tensor, harmonic_kernel_sizes=[11,17,23], percussive_kernel_sizes=[3,7,13], eps=1e-6):
+    # Compute the instantaneous phase from the analytic signal
+    phase = torch.angle(analytic_signal)
+
+    return envelope, phase
+
+def compute_harmonics(mag: torch.Tensor, harmonic_kernel_sizes=[11,17,23], percussive_kernel_sizes=[3,7,13], eps=1e-8):
     # Calculate log-magnitude spectrograms
-    mag = torch.log10(stft_matrix.abs()+eps)
 
     harmonic_list = []
     percussive_list = []
@@ -240,21 +281,24 @@ def compute_harmonics(stft_matrix: torch.Tensor, harmonic_kernel_sizes=[11,17,23
     harmonic = torch.cat(harmonic_list, dim=-1)
     percussive = torch.cat(percussive_list, dim=-1)
 
+    # normalize values
+    harmonic = minmax_scale(harmonic, eps=eps)
+    percussive = minmax_scale(percussive, eps=eps)
+
     return harmonic, percussive
 
 def combined_aux_loss(
-        original_audio: torch.Tensor, generated_audio: torch.Tensor, sample_rate: int,
-        c_mfcc=1., c_lfcc=1., c_hd=1., c_sts=1.,
+        original_audio: torch.Tensor, generated_audio: torch.Tensor,
+        c_tefs=1., c_hd=1., c_tsi=1., n_mels=128, sample_rate=40000,
         n_fft=1024, hop_length=320, win_length=1024,
-        n_mfcc=13, n_lfcc=13, n_filter=80,
-        f_min=0., f_max=None, eps=None):
+        eps=None):
 
     kernel_size = n_fft//hop_length+1
     if kernel_size % 2 == 0: kernel_size+=1 #enforce odd kernel size
     if eps is None: eps = torch.finfo(original_audio.dtype).eps
 
     # Compute STFT once
-    if c_hd+c_sts+c_mfcc+c_lfcc>0:
+    if c_hd+c_tsi>0:
         
         hann_window = torch.hann_window(win_length).to(
             dtype=original_audio.dtype, device=original_audio.device
@@ -278,65 +322,41 @@ def combined_aux_loss(
             onesided=True,
             center=False)
         
-        if c_sts+c_mfcc+c_lfcc>0:
-            org_mag = torch.log10(original_stft.abs()+eps)
-            gen_mag = torch.log10(generated_stft.abs()+eps)
+        MelScaler = T.MelScale(n_mels=n_mels, sample_rate=sample_rate, n_stft=n_fft // 2 + 1).to(original_audio.device)
+        org_mag = MelScaler(original_stft.abs()+eps)
+        gen_mag = MelScaler(generated_stft.abs()+eps)
     
     # Harmonic Loss
     if c_hd>0:
-        original_harmonics, original_percussives = compute_harmonics(original_stft,eps=eps)
-        generated_harmonics, generated_percussives = compute_harmonics(generated_stft,eps=eps)
+        original_harmonics, original_percussives = compute_harmonics(org_mag, eps=eps)
+        generated_harmonics, generated_percussives = compute_harmonics(gen_mag, eps=eps)
         # Define loss terms
-        harmonic_loss = F.smooth_l1_loss(generated_harmonics, original_harmonics)
-        harmonic_loss += F.smooth_l1_loss(generated_percussives, original_percussives)
+        harmonic_loss = F.l1_loss(generated_harmonics, original_harmonics)
+        harmonic_loss += F.l1_loss(generated_percussives, original_percussives)
         harmonic_loss *= c_hd
-        harmonic_loss
     else: harmonic_loss = 0
 
-    # Spectral Temporal Smoothness Loss
-    if c_sts>0:
-        # temporal invariant phase
-        phase_loss = compute_phase_loss(org_mag.sum(-2,keepdim=True),gen_mag.sum(-2,keepdim=True)) * c_sts
-        
-    else: phase_loss = 0
+    # temporal invariant phase
+    if c_tsi>0:
+        freq_tsi = compute_tsi_loss(org_mag,gen_mag,dim=-1, eps=eps)
+        temp_tsi = compute_tsi_loss(org_mag,gen_mag,dim=-2, eps=eps)
+        tsi_loss = (freq_tsi+temp_tsi) * c_tsi
+    else: tsi_loss = 0
 
-    # MFCC Loss
-    if c_mfcc>0:
+    # Temperol Envelope and Fine Structure Loss
+    if c_tefs>0:
         # temporal envelope
-        gen_temp = compute_envelope(gen_mag,dim=-2,kernel_size=3)
-        org_temp = compute_envelope(org_mag,dim=-2,kernel_size=3)
-        temporal_loss = F.smooth_l1_loss(gen_temp, org_temp) * c_mfcc
+        gen_te, gen_tfs = compute_tefs(generated_audio, eps=eps)
+        org_te, org_tfs = compute_tefs(original_audio, eps=eps)
+        phase_diff = torch.remainder(gen_tfs - org_tfs, 2 * torch.pi)
 
-        # mfcc_transform = torchaudio.transforms.MFCC(
-        #     sample_rate=sample_rate, n_mfcc=n_mfcc, log_mels=True,
-        #     melkwargs=dict(n_fft=n_fft, hop_length=hop_length, win_length=win_length, n_mels=n_filter, f_min=f_min, f_max=f_max)
-        # ).to(original_audio.device)
-        # original_mfcc = mfcc_transform(original_audio)
-        # generated_mfcc = mfcc_transform(generated_audio)
-        # mfcc_loss = F.smooth_l1_loss(generated_mfcc, original_mfcc) * c_mfcc
-        
-    else: temporal_loss = 0
-
-    # LFCC Loss
-    if c_lfcc>0:
-        # spectral
-        gen_spec = compute_envelope(gen_mag,dim=-1,kernel_size=3)
-        org_spec = compute_envelope(org_mag,dim=-1,kernel_size=3)
-        spectral_loss = F.smooth_l1_loss(gen_spec, org_spec) * c_lfcc
-
-        # lfcc_transform = torchaudio.transforms.LFCC(
-        #     sample_rate=sample_rate, n_lfcc=n_lfcc, n_filter=n_filter, f_min=f_min, f_max=f_max,log_lf=True,
-        #     speckwargs=dict(n_fft=n_fft, hop_length=hop_length, win_length=win_length)
-        # ).to(original_audio.device)
-        # original_lfcc = lfcc_transform(original_audio)
-        # generated_lfcc = lfcc_transform(generated_audio)
-        # lfcc_loss = F.smooth_l1_loss(generated_lfcc, original_lfcc) * c_lfcc
-    else: spectral_loss = 0
-    mfcc_loss=lfcc_loss=0
+        tefs_loss = F.l1_loss(gen_te, org_te) +  phase_diff.sin().abs().mean() #F.l1_loss(gen_tfs, org_tfs)
+        tefs_loss*=c_tefs
+    else: tefs_loss = 0
     
-    return harmonic_loss, temporal_loss, spectral_loss, mfcc_loss, lfcc_loss, phase_loss
+    return harmonic_loss, tefs_loss, tsi_loss
 
-def gradient_norm_loss(original_audio: torch.Tensor, generated_audio: torch.Tensor, net_d: torch.nn.Module):
+def gradient_norm_loss(original_audio: torch.Tensor, generated_audio: torch.Tensor, net_d: torch.nn.Module, eps=1e-8):
     loss=0
     # Compute the gradient penalty
     # Randomly interpolate between real and generated data
@@ -353,12 +373,12 @@ def gradient_norm_loss(original_audio: torch.Tensor, generated_audio: torch.Tens
         gradients = torch.autograd.grad(
             outputs=output,
             inputs=interpolated,
-            grad_outputs=torch.ones(output.size(), device=original_audio.device),
+            grad_outputs=torch.ones_like(output, device=original_audio.device),
             retain_graph=True,
             only_inputs=True
-        )
-        grad_norm = torch.stack([param.norm() for param in gradients if hasattr(param, "norm")]).norm(2)
-        loss += torch.log10(grad_norm).abs().mean() # force gradnorm=1
+        )[0]
+        grad_norm = gradients.view(gradients.size(0), -1).norm(2, dim=-1)+eps
+        loss += torch.log1p((grad_norm - 1) ** 2).mean()
     return loss/len(disc_interpolated_output)
 
 def feature_loss(fmap_r, fmap_g):

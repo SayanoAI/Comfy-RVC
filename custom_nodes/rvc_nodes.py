@@ -362,12 +362,14 @@ class RVCTrainParamsNode:
                 c_mel=("FLOAT",dict(default=45.,min=0.,max=100.,step=.1)),
                 c_kl=("FLOAT",dict(default=1.,min=0.,max=100.,step=.1)),
                 c_fm=("FLOAT",dict(default=2.,min=0.,max=100.,step=.1)),
-                c_mfcc=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
-                c_lfcc=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
+                c_tefs=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
                 c_hd=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
-                c_sts=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
+                c_tsi=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
                 c_gp=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
-                use_balancer=("BOOLEAN",dict(default=False))
+                use_balancer=("BOOLEAN",dict(default=False)),
+                use_pareto=("BOOLEAN",dict(default=False)),
+                fast_mode=("BOOLEAN",dict(default=False)),
+                fp16_run=("BOOLEAN",dict(default=True)),
             )
         }
 

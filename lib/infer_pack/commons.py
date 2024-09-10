@@ -67,6 +67,10 @@ def autocorrelation1d(log_magnitude, max_lag=None):
     
     return autocorr.nan_to_num(0)
 
+def minmax_scale(tensor: torch.Tensor, eps=1e-8):
+    tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min() + eps)
+    return tensor
+
 def init_weights(m, mean=0.0, std=0.01):
     classname = m.__class__.__name__
     if classname.find("Conv") != -1:
