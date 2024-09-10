@@ -20,7 +20,7 @@ from ..lib.model_utils import load_hubert
 
 from .utils import MultipleTypeProxy, increment_filename_no_overwrite, model_downloader
 from .settings import PITCH_EXTRACTION_OPTIONS
-from .settings.downloader import PRETRAINED_MODELS, RVC_DOWNLOAD_LINK, RVC_INDEX, RVC_MODELS, download_file, extract_zip_without_structure
+from .settings.downloader import PRETRAINED_MODELS_D, PRETRAINED_MODELS_G, RVC_DOWNLOAD_LINK, RVC_INDEX, RVC_MODELS, download_file, extract_zip_without_structure
 
 from ..lib.audio import SUPPORTED_AUDIO, audio_to_bytes, load_input_audio, save_input_audio, get_audio, SR_MAP
 
@@ -387,9 +387,18 @@ class RVCTrainModelNode:
     @classmethod
     def INPUT_TYPES(cls):
         DEVICES = [str(i) for i in range(torch.cuda.device_count())]
-        PRETRAINED_G = [model for model in PRETRAINED_MODELS if "G" in model] + get_filenames(root=BASE_MODELS_DIR,folder="pretrained_v2",name_filters=["G"],format_func=lambda x: f"pretrained_v2/{os.path.basename(x)}")
+        PRETRAINED_G = PRETRAINED_MODELS_G + get_filenames(
+            root=BASE_MODELS_DIR,
+            folder="pretrained_v2",
+            name_filters=["G"],
+            filter_func=lambda x: os.stat(x).st_size/1024**2<600, #generators are 400+mb
+            format_func=lambda x: f"pretrained_v2/{os.path.basename(x)}")
         PRETRAINED_G = list(set(PRETRAINED_G)) # dedupe
-        PRETRAINED_D = [model for model in PRETRAINED_MODELS if "D" in model] + get_filenames(root=BASE_MODELS_DIR,folder="pretrained_v2",name_filters=["D"],format_func=lambda x: f"pretrained_v2/{os.path.basename(x)}")
+        PRETRAINED_D = PRETRAINED_MODELS_D + get_filenames(
+            root=BASE_MODELS_DIR,folder="pretrained_v2",
+            name_filters=["D"],
+            filter_func=lambda x: os.stat(x).st_size/1024**2>600, #discriminators are 800+mb
+            format_func=lambda x: f"pretrained_v2/{os.path.basename(x)}")
         PRETRAINED_D = list(set(PRETRAINED_D)) # dedupe
         
         return {

@@ -41,11 +41,11 @@ def get_subprocesses(pid = os.getpid()):
             })
         yield process
 
-def get_filenames(root=CWD,folder="**",exts=["*"],name_filters=[""],filter_func=any,format_func=lambda x:x):
+def get_filenames(root=CWD,folder="**",exts=["*"],name_filters=[""],filter_func=bool,format_func=lambda x:x):
     fnames = []
     for ext in exts:
         fnames.extend(glob.glob(f"{root}/{folder}/*.{ext}",recursive=True))
-    return sorted([format_func(ele) for ele in fnames if filter_func([nf.lower() in ele.lower() for nf in name_filters])])
+    return sorted([format_func(ele) for ele in fnames if any([nf.lower() in ele.lower() for nf in name_filters]) and filter_func(ele)])
 
 def get_index(arr,value):
     if arr is not None:
