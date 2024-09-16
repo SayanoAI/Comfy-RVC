@@ -9,6 +9,7 @@ import soundfile as sf
 import ffmpeg
 from scipy.ndimage import uniform_filter1d, median_filter
 from scipy.interpolate import interp1d
+from collections.abc import Mapping
 
 MAX_INT16 = 32768
 SUPPORTED_AUDIO = ["mp3","flac","wav"] # ogg breaks soundfile
@@ -110,10 +111,13 @@ class AudioProcessor:
 
 def get_audio(audio):
     if hasattr(audio,"__call__"): #VHS_AUDIO is a function
-        return bytes_to_audio(audio())
-    elif isinstance(audio,dict): #comfyui AUDIO is a dict
+        audio = audio()
+    if isinstance(audio,Mapping): #comfyui AUDIO
         return audio["waveform"].squeeze(0).transpose(0,1).numpy(), audio["sample_rate"]
-    else: return audio
+    elif type(audio)==bytes: return bytes_to_audio(audio)
+    else:
+        print(f"{audio} is neither VHS_AUDIO or AUDIO format...")
+        return audio
 
 def load_audio(file, sr, **kwargs):
     try:
