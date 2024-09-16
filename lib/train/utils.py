@@ -187,7 +187,7 @@ def latest_checkpoint_path(dir_path, regex="G_*.pth"):
     return x
 
 
-def plot_spectrogram_to_numpy(spectrogram):
+def plot_spectrogram_to_numpy(spectrogram, cmap=None):
     global MATPLOTLIB_FLAG
     if not MATPLOTLIB_FLAG:
         import matplotlib
@@ -200,7 +200,7 @@ def plot_spectrogram_to_numpy(spectrogram):
     import numpy as np
 
     fig, ax = plt.subplots(figsize=(10, 2))
-    im = ax.imshow(spectrogram, aspect="auto", origin="lower", interpolation="none")
+    im = ax.imshow(spectrogram, aspect="auto", origin="lower", interpolation="none", cmap=cmap)
     plt.colorbar(im, ax=ax)
     plt.xlabel("Frames")
     plt.ylabel("Channels")

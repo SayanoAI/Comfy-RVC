@@ -612,6 +612,7 @@ def train_and_evaluate(
                     "slice/mel_org": utils.plot_spectrogram_to_numpy(y_mel[0].data.cpu().numpy()),
                     "slice/mel_gen": utils.plot_spectrogram_to_numpy(y_hat_mel[0].data.cpu().numpy()),
                     "all/mel": utils.plot_spectrogram_to_numpy(mel[0].data.cpu().numpy()),
+                    "all/diff": utils.plot_spectrogram_to_numpy((y_mel[0]-y_mel[0]).abs().data.cpu().numpy(), cmap="hot")
                 }
 
                 with torch.no_grad():
