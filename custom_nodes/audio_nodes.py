@@ -54,7 +54,26 @@ class LoadAudio:
     def IS_CHANGED(cls, audio, sr):
         return get_hash(audio,sr)
 
-    
+class AudioInfoNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "audio": (MultipleTypeProxy('AUDIO,VHS_AUDIO'),),
+            }}
+
+    CATEGORY = CATEGORY
+
+    RETURN_TYPES = ("VHS_AUDIO","AUDIO","FLOAT", "INT")
+    RETURN_NAMES = ("vhs_audio","audio","seconds","sr")
+    FUNCTION = "get_info"
+
+    def get_info(self, audio):
+        input_audio = get_audio(audio)
+        seconds = len(input_audio[0])/input_audio[1]
+        return (lambda:audio_to_bytes(*input_audio),to_audio_dict(*input_audio),float(seconds),int(input_audio[1]))
+
+
 class DownloadAudio:
     @classmethod
     def INPUT_TYPES(cls):
@@ -336,7 +355,8 @@ NODE_CLASS_MAPPINGS = {
     "MergeAudioNode": MergeAudioNode,
     "AudioBatchValueNode": AudioBatchValueNode,
     "DownloadAudio": DownloadAudio,
-    "ProcessAudioNode": ProcessAudioNode
+    "ProcessAudioNode": ProcessAudioNode,
+    "AudioInfoNode": AudioInfoNode
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -345,5 +365,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RVC-Studio.PreviewAudio": "🌺Save Audio",
     "MergeAudioNode": "🌺Merge Audio",
     "AudioBatchValueNode": "🌺Audio RMS Batch Values",
-    "ProcessAudioNode": "🌺Audio Processor"
+    "ProcessAudioNode": "🌺Audio Processor",
+    "AudioInfoNode": "🌺Audio Info"
 }

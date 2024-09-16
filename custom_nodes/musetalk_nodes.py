@@ -2,8 +2,8 @@
 import json
 from multiprocessing.pool import ThreadPool
 import os
+import shutil
 import cv2
-import copy
 from tqdm import tqdm
 
 from ..lib.audio import get_audio, remix_audio
@@ -39,15 +39,20 @@ def tensor_to_opencv(tensor_image: torch.Tensor):
 def process_frame(i, res_frame, coord_list_cycle, frame_list_cycle, frames_dir, results_dir, fp_model):
     bbox = coord_list_cycle[i % (len(coord_list_cycle))]
     bbox = list(map(int, bbox))
-    ori_frame = cv2.imread(os.path.join(frames_dir,frame_list_cycle[i % (len(frame_list_cycle))]))
-    x1, y1, x2, y2 = bbox
+    img_src = os.path.join(frames_dir,frame_list_cycle[i % (len(frame_list_cycle))])
+    img_dest = os.path.join(results_dir, f"{str(i).zfill(8)}.png")
     
-    try:
-        res_frame = cv2.resize(res_frame.astype(np.uint8), (x2-x1, y2-y1))
-        combined_frame = get_image(fp_model, ori_frame, res_frame, bbox)
-        cv2.imwrite(os.path.join(results_dir, f"{str(i).zfill(8)}.png"), combined_frame)
-    except Exception as error:
-        print(f"{error=}")
+    x1, y1, x2, y2 = bbox
+    if sum(bbox)>0:
+        try:
+            ori_frame = cv2.imread(img_src)
+            res_frame = cv2.resize(res_frame.astype(np.uint8), (x2-x1, y2-y1))
+            if sum(bbox)==0: combined_frame = ori_frame.clone() #use original frame if no face detected
+            else: combined_frame = get_image(fp_model, ori_frame, res_frame, bbox)
+            return cv2.imwrite(img_dest, combined_frame)
+        except Exception as error:
+            print(f"{error=}")
+    return shutil.copy(img_src,img_dest)
 
 def get_imagefiles(directory_path):
     assert os.path.isdir(directory_path), f"{directory_path} is not a directory!"
@@ -228,17 +233,24 @@ class MuseTalkNode:
             _ = model_downloader("musetalk/sd-vae-ft-mse/config.json")
             vae = VAE(model_path = os.path.dirname(vae_model), use_float16=True)
             
+            # init empty latent
+            empty_frame = cv2.imread(os.path.join(frames_dir,frame_list[0]))
+            empty_frame = cv2.resize(empty_frame,(256,256),interpolation = cv2.INTER_NEAREST)
+            empty_latent = torch.zeros_like(vae.get_latents_for_unet(empty_frame))
+
             input_latent_list = []
             for bbox, frame in tqdm(zip(coord_list, frame_list)):
                 bbox = list(map(int,bbox))
                 frame = cv2.imread(os.path.join(frames_dir,frame))
                 if sum(bbox) == 0:
                     print(f"No face detected: {bbox}")
-                    continue
-                x1, y1, x2, y2 = bbox
-                crop_frame = frame[y1:y2, x1:x2]
-                crop_frame = cv2.resize(crop_frame,(256,256),interpolation = cv2.INTER_LANCZOS4)
-                latents = vae.get_latents_for_unet(crop_frame)
+                    latents = empty_latent.clone()
+                else:
+                    x1, y1, x2, y2 = bbox
+                    crop_frame = frame[y1:y2, x1:x2]
+                    crop_frame = cv2.resize(crop_frame,(256,256),interpolation = cv2.INTER_LANCZOS4)
+                    latents = vae.get_latents_for_unet(crop_frame)
+                
                 input_latent_list.append(latents)
         
             # to smooth the first and the last frame

@@ -75,12 +75,6 @@ class MergeImageBatches:
                 for new_img in images[1:]:
                     image = torch.cat([image,new_img])
                     gc_collect()
-
-                # if self.__archive__ is None:
-                #     with tempfile.NamedTemporaryFile(delete=False) as ntf:
-                #         self.__archive__ = ntf.name
-                # images = self.iter_images(self.__archive__,images)
-                del images
                 images = image
                 gc_collect()
             else:
