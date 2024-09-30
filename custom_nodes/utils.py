@@ -35,7 +35,7 @@ class MultipleTypeProxy(str):
             if o in self: return True
         for s in self.split(","):
             if s in other: return True
-        return False
+        return str(self)=="*"
 
     def __ne__(self, other):
         return not self.__eq__(other)

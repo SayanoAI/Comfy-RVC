@@ -259,8 +259,8 @@ class SimpleMathNode:
     def INPUT_TYPES(s):
         return {
             "optional": {
-                "n1": (MultipleTypeProxy("INT,FLOAT"), { "default": None, "step": 0.1 }),
-                "n2": (MultipleTypeProxy("INT,FLOAT"), { "default": None, "step": 0.1 }),
+                "n1": (MultipleTypeProxy("*"), { "default": None, "step": 0.1 }),
+                "n2": (MultipleTypeProxy("*"), { "default": None, "step": 0.1 }),
                 "round_up": ("BOOLEAN", {"default": False})
             },
             "required": {
