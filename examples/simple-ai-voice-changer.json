@@ -1,6 +1,6 @@
 {
-  "last_node_id": 20,
-  "last_link_id": 25,
+  "last_node_id": 21,
+  "last_link_id": 27,
   "nodes": [
     {
       "id": 1,
@@ -64,6 +64,26 @@
           "hidden": false,
           "paused": false,
           "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
         }
       ]
     },
@@ -79,7 +99,7 @@
         "1": 102
       },
       "flags": {},
-      "order": 0,
+      "order": 4,
       "mode": 0,
       "outputs": [
         {
@@ -101,8 +121,8 @@
         "Node name for S&R": "LoadRVCModelNode"
       },
       "widgets_values": [
-        "RVC/Sayano.pth",
-        "RVC/.index/Sayano_v2_40k.index"
+        "RVC/Comfy-Sayano_40k_2.pth",
+        "RVC/.index/added_IVF1063_Flat_nprobe_1_Sayano_v2.index"
       ]
     },
     {
@@ -117,7 +137,7 @@
         "1": 58
       },
       "flags": {},
-      "order": 1,
+      "order": 0,
       "mode": 0,
       "outputs": [
         {
@@ -145,10 +165,10 @@
       ],
       "size": {
         "0": 315,
-        "1": 178
+        "1": 202
       },
       "flags": {},
-      "order": 2,
+      "order": 3,
       "mode": 0,
       "outputs": [
         {
@@ -166,10 +186,11 @@
       "widgets_values": [
         "rmvpe",
         false,
-        0.75,
+        0.8,
         0,
         0.25,
-        0.25
+        0.25,
+        160
       ]
     },
     {
@@ -236,6 +257,26 @@
           "hidden": false,
           "paused": false,
           "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
         }
       ]
     },
@@ -257,7 +298,7 @@
         {
           "name": "audio",
           "type": "VHS_AUDIO",
-          "link": 24,
+          "link": 26,
           "slot_index": 0
         }
       ],
@@ -303,7 +344,7 @@
         "1": 100.08426666259766
       },
       "flags": {},
-      "order": 3,
+      "order": 1,
       "mode": 0,
       "properties": {
         "text": ""
@@ -318,8 +359,8 @@
       "id": 19,
       "type": "RVC-Studio.PreviewAudio",
       "pos": [
-        1340,
-        125
+        1343,
+        120
       ],
       "size": [
         315,
@@ -337,7 +378,7 @@
         {
           "name": "filename",
           "type": "STRING",
-          "link": 25,
+          "link": 27,
           "widget": {
             "name": "filename"
           }
@@ -376,40 +417,61 @@
           "hidden": false,
           "paused": false,
           "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
         }
       ]
     },
     {
-      "id": 20,
-      "type": "RVC-Studio.LoadAudio",
+      "id": 21,
+      "type": "DownloadAudio",
       "pos": [
-        -31,
-        171
+        -132,
+        181
       ],
-      "size": {
-        "0": 210,
-        "1": 146
-      },
+      "size": [
+        315,
+        170
+      ],
       "flags": {},
-      "order": 4,
+      "order": 2,
       "mode": 0,
       "outputs": [
         {
           "name": "audio_name",
           "type": "STRING",
           "links": [
-            25
+            27
           ],
-          "slot_index": 0,
-          "shape": 3
+          "shape": 3,
+          "slot_index": 0
         },
         {
           "name": "vhs_audio",
           "type": "VHS_AUDIO",
           "links": [
-            24
+            26
           ],
-          "shape": 3
+          "shape": 3,
+          "slot_index": 1
         },
         {
           "name": "audio",
@@ -419,12 +481,18 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "RVC-Studio.LoadAudio"
+        "Node name for S&R": "DownloadAudio"
       },
       "widgets_values": [
-        "idol-tv.flac",
+        "https://www.youtube.com/watch?v=4Oc6PTtcthA",
         "None",
-        "image"
+        "You are my sunshine",
+        "flac",
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
       ]
     }
   ],
@@ -486,16 +554,16 @@
       "VHS_AUDIO"
     ],
     [
-      24,
-      20,
+      26,
+      21,
       1,
       9,
       0,
       "VHS_AUDIO"
     ],
     [
-      25,
-      20,
+      27,
+      21,
       0,
       19,
       1,
@@ -506,10 +574,10 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.7513148009015777,
+      "scale": 0.9090909090909091,
       "offset": [
-        -875.4596002397666,
-        188.08314484174144
+        101.92939976023325,
+        97.86159938719587
       ]
     }
   },
