@@ -509,7 +509,11 @@ def train_and_evaluate(
             y_d_hat_r, y_d_hat_g, fmap_r, fmap_g = net_d(wave, y_hat)
             with autocast(enabled=False):
                 loss_mel = F.l1_loss(y_mel, y_hat_mel)*hps.train.c_mel if hps.train.get("c_mel",0.)>0 else 0 #default 45
-                loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask)*hps.train.c_kl if hps.train.get("c_kl",0.)>0 else 0 #default 1
+                if hps.train.get("c_kl",0.)>0:
+                    loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask)*hps.train.c_kl
+                else:
+                    loss_kl = F.mse_loss(z_p,m_p)+F.smooth_l1_loss(logs_q,logs_p)
+                    loss_kl /= torch.sum(z_mask)
                 loss_fm = feature_loss(fmap_r, fmap_g)*hps.train.c_fm if hps.train.get("c_fm",0.)>0 else 0 #default 2
                 harmonic_loss, tefs_loss, tsi_loss = combined_aux_loss(
                     wave, y_hat,n_mels=hps.data.n_mel_channels,sample_rate=hps.data.sampling_rate,

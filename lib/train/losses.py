@@ -74,7 +74,7 @@ class LossBalancer:
         output_params = torch.autograd.grad(current_loss, model_params, grad_outputs=torch.ones_like(current_loss, device=model_params.device), retain_graph=True, only_inputs=True)[0]
 
         # Compute L2 gradient norm
-        grad_norm = output_params.view(output_params.size(0),-1).norm(2, dim=-1)
+        grad_norm = output_params.view(output_params.size(0),-1).norm(2, dim=-1).mean()
         ema_loss = self.historical_losses.get(key, current_loss)+self.epsilon
         return grad_norm/ema_loss
 
@@ -121,7 +121,7 @@ class LossBalancer:
         """
         
         if not self.initial_weights: self.initial_weights = {k: 1.0 for k in losses} # initialize weights
-        if not self.active: return sum(v*self.initial_weights[k] if k in self.initial_weights else v for k,v in losses)
+        if not self.active: return sum(v*self.initial_weights[k] if k in self.initial_weights else v for k,v in losses.items())
 
         gradients = {}
         valid_losses = {}
