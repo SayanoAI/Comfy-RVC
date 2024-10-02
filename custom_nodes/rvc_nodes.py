@@ -393,13 +393,13 @@ class RVCTrainModelNode:
             name_filters=["G"],
             filter_func=lambda x: os.stat(x).st_size/1024**2<600, #generators are 400+mb
             format_func=lambda x: f"pretrained_v2/{os.path.basename(x)}")
-        PRETRAINED_G = list(set(PRETRAINED_G)) # dedupe
+        PRETRAINED_G = [" "]+list(set(PRETRAINED_G)) # dedupe
         PRETRAINED_D = PRETRAINED_MODELS_D + get_filenames(
             root=BASE_MODELS_DIR,folder="pretrained_v2",
             name_filters=["D"],
             filter_func=lambda x: os.stat(x).st_size/1024**2>600, #discriminators are 800+mb
             format_func=lambda x: f"pretrained_v2/{os.path.basename(x)}")
-        PRETRAINED_D = list(set(PRETRAINED_D)) # dedupe
+        PRETRAINED_D = [" "]+list(set(PRETRAINED_D)) # dedupe
         
         return {
             "required": {
@@ -408,7 +408,7 @@ class RVCTrainModelNode:
             },
             "optional": dict(
                 gpu=(DEVICES, {"default": DEVICES[0]}),
-                total_epoch=("INT",dict(default=100,min=10,max=1000,step=10)),
+                total_epoch=("INT",dict(default=100,min=1,max=1000,step=1)),
                 save_every_epoch=("INT",dict(default=0,min=0,max=100)),
                 pretrained_G=(PRETRAINED_G,{"default": PRETRAINED_G[0]}),
                 pretrained_D=(PRETRAINED_D,{"default": PRETRAINED_D[0]}),
@@ -439,8 +439,8 @@ class RVCTrainModelNode:
                     gpu="0",
                     total_epoch=100,
                     save_every_epoch=0,
-                    pretrained_G="",
-                    pretrained_D="",
+                    pretrained_G=" ",
+                    pretrained_D=" ",
                     if_save_latest=True,
                     if_cache_gpu=True,
                     if_save_every_weights=False,
@@ -451,6 +451,8 @@ class RVCTrainModelNode:
                     log_every_epoch=1.,
                     num_workers=1):
         
+        pretrained_G = pretrained_G.strip()
+        pretrained_D = pretrained_D.strip()
         sample_rate = rvc_dataset_pipe["sample_rate"]
         name = rvc_dataset_pipe["name"]
         dataset_dir = rvc_dataset_pipe["dataset_dir"]
@@ -468,8 +470,8 @@ class RVCTrainModelNode:
         hparams.save_every_epoch = save_every_epoch
         hparams.name = name
         hparams.total_epoch = total_epoch
-        hparams.pretrainG = model_downloader(pretrained_G)
-        hparams.pretrainD = model_downloader(pretrained_D)
+        hparams.pretrainG = model_downloader(pretrained_G) if pretrained_G else ""
+        hparams.pretrainD = model_downloader(pretrained_D) if pretrained_D else ""
         hparams.version = "v2"
         hparams.gpus = gpu
         hparams.sample_rate = sample_rate
