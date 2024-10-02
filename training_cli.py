@@ -24,6 +24,7 @@ from .lib.infer_pack import commons
 from time import sleep
 from time import time as ttime
 from .lib.train.data_utils import (
+    BucketSampler,
     TextAudioLoaderMultiNSFsid,
     TextAudioLoader,
     TextAudioCollateMultiNSFsid,
@@ -151,12 +152,16 @@ def run(rank, n_gpus, hps, device):
     if rank == 0:
         logger = utils.get_logger(hps.model_dir)
         logger.info(hps)
-        # utils.check_git_hash(hps.model_dir)
         writer = SummaryWriter(log_dir=hps.model_dir)
         writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
-    dist.init_process_group(
-        backend="gloo", init_method="env://", world_size=n_gpus, rank=rank
-    )
+    if n_gpus>1:
+        try:
+            dist.init_process_group(backend="gloo", init_method="env://", world_size=n_gpus, rank=rank)
+            distributed = True
+        except Exception as error:
+            print(f"Failed to initialize dist: {error=}")
+            distributed = False
+    else: distributed=False
     torch.manual_seed(hps.train.seed)
     if torch.cuda.is_available():
         torch.cuda.set_device(f"cuda:{device}")
@@ -166,15 +171,22 @@ def run(rank, n_gpus, hps, device):
     else:
         train_dataset = TextAudioLoader(hps.data.training_files, hps.data)
     
-    train_sampler = DistributedBucketSampler(
-        train_dataset,
-        hps.train.batch_size * n_gpus,
-        # [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200,1400],  # 16s
-        [100, 200, 300, 400, 500, 600, 700, 800, 900],  # 16s
-        num_replicas=n_gpus,
-        rank=rank,
-        shuffle=True,
-    )
+    if distributed:
+        train_sampler = DistributedBucketSampler(
+            train_dataset,
+            hps.train.batch_size * n_gpus,
+            [100, 200, 300, 400, 500, 600, 700, 800, 900],  # 16s
+            num_replicas=n_gpus,
+            rank=rank,
+            shuffle=True,
+        )
+    else:
+        train_sampler = BucketSampler(
+            train_dataset,
+            hps.train.batch_size,
+            [100, 200, 300, 400, 500, 600, 700, 800, 900],  # 16s            
+            shuffle=True,
+        )
     
     # It is possible that dataloader's workers are out of shared memory. Please try to raise your shared memory limit.
     # num_workers=8 -> num_workers=4
@@ -227,12 +239,13 @@ def run(rank, n_gpus, hps, device):
         eps=hps.train.eps,
     )
 
-    if torch.cuda.is_available():
-        net_g = DDP(net_g, device_ids=[rank])
-        net_d = DDP(net_d, device_ids=[rank])
-    else:
-        net_g = DDP(net_g)
-        net_d = DDP(net_d)
+    if distributed:
+        if torch.cuda.is_available():
+            net_g = DDP(net_g, device_ids=[rank])
+            net_d = DDP(net_d, device_ids=[rank])
+        else:
+            net_g = DDP(net_g)
+            net_d = DDP(net_d)
 
     try:  # resume training
         _, _, _, epoch_str, d_kwargs = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "D_*.pth"), net_d, optim_d)
@@ -250,11 +263,14 @@ def run(rank, n_gpus, hps, device):
         if hps.pretrainG != "":
             if rank == 0:
                 logger.info("loaded pretrained %s" % (hps.pretrainG))
-            print(net_g.module.load_state_dict(torch.load(hps.pretrainG, map_location="cpu")["model"]))
+            if hasattr(net_g,"module"): print(net_g.module.load_state_dict(torch.load(hps.pretrainG, map_location="cpu")["model"]))
+            else: print(net_g.load_state_dict(torch.load(hps.pretrainG, map_location="cpu")["model"]))
         if hps.pretrainD != "":
             if rank == 0:
                 logger.info("loaded pretrained %s" % (hps.pretrainD))
-            print(net_d.module.load_state_dict(torch.load(hps.pretrainD, map_location="cpu")["model"]))
+            
+            if hasattr(net_d,"module"): print(net_d.module.load_state_dict(torch.load(hps.pretrainD, map_location="cpu")["model"]))
+            else: print(net_d.load_state_dict(torch.load(hps.pretrainD, map_location="cpu")["model"]))
         d_kwargs = g_kwargs = {}
 
     scheduler_g = torch.optim.lr_scheduler.ExponentialLR(
@@ -283,6 +299,7 @@ def run(rank, n_gpus, hps, device):
             )
     cache = []
     for epoch in range(epoch_str, hps.train.epochs + 1):
+        train_loader.batch_sampler.set_epoch(epoch)
         if rank == 0:
             train_and_evaluate(
                 rank,
@@ -326,7 +343,6 @@ def train_and_evaluate(
     if writers is not None:
         writer, _ = writers
 
-    train_loader.batch_sampler.set_epoch(epoch)
     global global_step, least_loss, loss_file, best_model_name, gradient_clip_value
 
     net_g.train()
@@ -508,13 +524,9 @@ def train_and_evaluate(
             # Generator
             y_d_hat_r, y_d_hat_g, fmap_r, fmap_g = net_d(wave, y_hat)
             with autocast(enabled=False):
-                loss_mel = F.l1_loss(y_mel, y_hat_mel)*hps.train.c_mel if hps.train.get("c_mel",0.)>0 else 0 #default 45
-                if hps.train.get("c_kl",0.)>0:
-                    loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask)*hps.train.c_kl
-                else:
-                    loss_kl = F.mse_loss(z_p,m_p)+F.smooth_l1_loss(logs_q,logs_p)
-                    loss_kl /= torch.sum(z_mask)
-                loss_fm = feature_loss(fmap_r, fmap_g)*hps.train.c_fm if hps.train.get("c_fm",0.)>0 else 0 #default 2
+                loss_mel = F.l1_loss(y_mel, y_hat_mel)*hps.train.get("c_mel",0.)
+                loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask)*hps.train.get("c_kl",0.)
+                loss_fm = feature_loss(fmap_r, fmap_g)*hps.train.get("c_fm",0.)
                 harmonic_loss, tefs_loss, tsi_loss = combined_aux_loss(
                     wave, y_hat,n_mels=hps.data.n_mel_channels,sample_rate=hps.data.sampling_rate,
                     c_tefs=hps.train.c_tefs if hps.train.get("c_tefs",0.)>0 else 0.,
