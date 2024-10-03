@@ -295,8 +295,16 @@ def run(rank, n_gpus, hps, device):
             epsilon=hps.train.eps,
             active=hps.train.get("use_balancer",False),
             use_pareto=hps.train.get("use_pareto",False),
-            use_norm=not hps.train.get("fast_mode",False)
-            )
+            use_norm=not hps.train.get("fast_mode",False),
+            initial_weights=dict(
+                loss_gen=1.,
+                loss_fm=hps.train.get("c_fm",2.),
+                loss_mel=hps.train.get("c_mel",45.),
+                loss_kl=hps.train.get("c_kl",1.),
+                harmonic_loss=hps.train.get("c_hd",0.),
+                tsi_loss=hps.train.get("c_tsi",0.),
+                tefs_loss=hps.train.get("c_tefs",0.),
+            ))
     cache = []
     for epoch in range(epoch_str, hps.train.epochs + 1):
         train_loader.batch_sampler.set_epoch(epoch)
@@ -524,14 +532,14 @@ def train_and_evaluate(
             # Generator
             y_d_hat_r, y_d_hat_g, fmap_r, fmap_g = net_d(wave, y_hat)
             with autocast(enabled=False):
-                loss_mel = F.l1_loss(y_mel, y_hat_mel)*hps.train.get("c_mel",0.)
-                loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask)*hps.train.get("c_kl",0.)
-                loss_fm = feature_loss(fmap_r, fmap_g)*hps.train.get("c_fm",0.)
+                loss_mel = F.l1_loss(y_mel, y_hat_mel) #*hps.train.get("c_mel",0.)
+                loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask) #*hps.train.get("c_kl",0.)
+                loss_fm = feature_loss(fmap_r, fmap_g) #*hps.train.get("c_fm",0.)
                 harmonic_loss, tefs_loss, tsi_loss = combined_aux_loss(
                     wave, y_hat,n_mels=hps.data.n_mel_channels,sample_rate=hps.data.sampling_rate,
-                    c_tefs=hps.train.c_tefs if hps.train.get("c_tefs",0.)>0 else 0.,
-                    c_hd=hps.train.c_hd if hps.train.get("c_hd",0.)>0 else 0.,
-                    c_tsi=hps.train.c_tsi if hps.train.get("c_tsi",0.)>0 else 0.,
+                    c_tefs=hps.train.get("c_tefs",0.),
+                    c_hd=hps.train.get("c_hd",0.),
+                    c_tsi=hps.train.get("c_tsi",0.),
                     n_fft=hps.data.filter_length,
                     hop_length=hps.data.hop_length,
                     win_length=hps.data.win_length,
@@ -539,7 +547,6 @@ def train_and_evaluate(
                 )
                 loss_gen, losses_gen = generator_loss(y_d_hat_g)
                 aux_loss = harmonic_loss + tefs_loss + tsi_loss
-                # loss_gen_all = loss_gen + loss_fm + loss_mel + loss_kl + aux_loss
                 loss_gen_all = balancer.on_train_batch_start(dict(
                     loss_gen=loss_gen,
                     loss_fm=loss_fm,
@@ -548,7 +555,7 @@ def train_and_evaluate(
                     harmonic_loss=harmonic_loss,
                     tsi_loss=tsi_loss,
                     tefs_loss=tefs_loss,
-                    ))
+                    ),input=y_hat)
                 
             optim_g.zero_grad()
             scaler.scale(loss_gen_all).backward()
@@ -558,44 +565,10 @@ def train_and_evaluate(
             scaler.update()
         
         if rank == 0:
-            # if epoch>=max(hps.total_epoch*.2,20): #start saving best model after 20% or 20 epochs
-            if loss_gen + loss_fm + loss_mel + loss_kl + aux_loss<least_loss:
-                least_loss = loss_gen + loss_fm + loss_mel + loss_kl + aux_loss
-                logger.info(f"[lowest loss] {least_loss=:.3f}: {loss_disc=:.3f} {gradient_penalty=:.3f} <==> {loss_gen=:.3f} {loss_fm=:.3f} {loss_mel=:.3f} {loss_kl=:.3f}")
-                logger.info(f"[aux] {aux_loss=:.3f}: {harmonic_loss=:.3f}, {tefs_loss=:.3f}, {tsi_loss=:.3f}")
-
-                if hps.save_best_model:
-                    if hasattr(net_g, "module"): ckpt = net_g.module.state_dict()
-                    else: ckpt = net_g.state_dict()
-                    
-                    best_model_name = f"{hps.name}_e{epoch}_s{global_step}_loss{least_loss:.0f}" if hps.save_every_weights else f"{hps.name}_loss{least_loss:2.0f}"
-                    status = save_checkpoint(ckpt,best_model_name,epoch,hps)
-                    logger.info(f"=== saving best model {best_model_name}: {status=} ===")
-                
-                with open(loss_file,"w") as f:
-                    json.dump(dict(least_loss=least_loss.item(),best_model_name=best_model_name,epoch=epoch,steps=global_step,
-                                   loss_weights = dict(balancer.ema_weights),
-                                   scalar_dict={
-                                       "total/loss/all": commons.serialize_tensor(loss_gen_all+loss_disc_all),
-                                        "total/loss/gen_all": commons.serialize_tensor(loss_gen_all),
-                                        "total/loss/aux": commons.serialize_tensor(aux_loss),
-                                        "total/loss/disc_all": commons.serialize_tensor(loss_disc_all),
-                                        "total/loss/gen": commons.serialize_tensor(loss_gen),
-                                        "total/loss/disc": commons.serialize_tensor(loss_disc),
-                                        "total/loss/fm": commons.serialize_tensor(loss_fm),
-                                        "total/loss/mel": commons.serialize_tensor(loss_mel),
-                                        "total/loss/kl": commons.serialize_tensor(loss_kl),
-                                        "aux/loss/harmonic": commons.serialize_tensor(harmonic_loss),
-                                        "aux/loss/tefs": commons.serialize_tensor(tefs_loss),
-                                        "aux/loss/tsi": commons.serialize_tensor(tsi_loss),
-                                        "gradient/grad_norm_disc": commons.serialize_tensor(grad_norm_d),
-                                        "gradient/grad_norm_gen": commons.serialize_tensor(grad_norm_g),
-                                        "gradient/gradient_penalty": commons.serialize_tensor(gradient_penalty),
-                                   }),f,indent=2)
-
-            if hps.train.log_interval>0 and global_step % hps.train.log_interval == 0:
+            if hps.train.log_interval>0 and global_step % hps.train.log_interval == 0: #tensorboard logging
                 lr = optim_g.param_groups[0]["lr"]
                 logger.info(f"Train Epoch: {epoch} [{100.0 * (epoch-1) / hps.total_epoch:.2f}% complete]")
+
                 # Amor For Tensorboard display
                 if loss_mel > 75:
                     loss_mel = 75
@@ -628,7 +601,7 @@ def train_and_evaluate(
                     "slice/mel_org": utils.plot_spectrogram_to_numpy(y_mel[0].data.cpu().numpy()),
                     "slice/mel_gen": utils.plot_spectrogram_to_numpy(y_hat_mel[0].data.cpu().numpy()),
                     "all/mel": utils.plot_spectrogram_to_numpy(mel[0].data.cpu().numpy()),
-                    "all/diff": utils.plot_spectrogram_to_numpy((y_mel[0]-y_mel[0]).abs().data.cpu().numpy(), cmap="hot")
+                    "slice/diff": utils.plot_spectrogram_to_numpy((y_mel[0]-y_hat_mel[0]).abs().data.cpu().numpy(), cmap="hot")
                 }
 
                 with torch.no_grad():
@@ -677,11 +650,46 @@ def train_and_evaluate(
             logger.info(f"saving ckpt {save_name}: {status}")
 
     if rank == 0:
-        logger.info(f"====> Epoch {epoch} (Total Loss={(loss_disc_all+loss_gen_all).item():.3f}): {global_step=} {lr=:.2E} {epoch_recorder.record()}")
+        total_loss = balancer.weighted_ema_loss + loss_disc_all
+        logger.info(f"====> Epoch {epoch} ({total_loss=:.3f}): {global_step=} {lr=:.2E} {epoch_recorder.record()}")
         logger.info(f"|| {loss_disc_all=:.3f}: {loss_disc=:.3f}, {gradient_penalty=:.3f}")
         logger.info(f"|| {loss_gen_all=:.3f}: {loss_gen=:.3f}, {loss_fm=:.3f}, {loss_mel=:.3f}, {loss_kl=:.3f}")
         logger.info(f"|| {harmonic_loss=:.3f}, {tefs_loss=:.3f}, {tsi_loss=:.3f}")
         balancer.on_epoch_end(.5 / (1 + np.exp(-10 * (epoch / hps.total_epoch - 0.16)))+.5) #sigmoid scaling of ema
+
+        if total_loss<least_loss:
+            least_loss = total_loss
+            logger.info(f"[lowest loss] {least_loss=:.3f}: {loss_disc=:.3f} {gradient_penalty=:.3f} <==> {loss_gen=:.3f} {loss_fm=:.3f} {loss_mel=:.3f} {loss_kl=:.3f}")
+            logger.info(f"[aux] {aux_loss=:.3f}: {harmonic_loss=:.3f}, {tefs_loss=:.3f}, {tsi_loss=:.3f}")
+
+            if hps.save_best_model:
+                if hasattr(net_g, "module"): ckpt = net_g.module.state_dict()
+                else: ckpt = net_g.state_dict()
+                
+                best_model_name = f"{hps.name}_e{epoch}_s{global_step}_loss{least_loss:.0f}" if hps.save_every_weights else f"{hps.name}_loss{least_loss:2.0f}"
+                status = save_checkpoint(ckpt,best_model_name,epoch,hps)
+                logger.info(f"=== saving best model {best_model_name}: {status=} ===")
+            
+            with open(loss_file,"w") as f:
+                json.dump(dict(least_loss=least_loss.item(),best_model_name=best_model_name,epoch=epoch,steps=global_step,
+                                loss_weights = dict(balancer.ema_weights),
+                                scalar_dict={
+                                    "total/loss/all": commons.serialize_tensor(loss_gen_all+loss_disc_all),
+                                    "total/loss/gen_all": commons.serialize_tensor(loss_gen_all),
+                                    "total/loss/aux": commons.serialize_tensor(aux_loss),
+                                    "total/loss/disc_all": commons.serialize_tensor(loss_disc_all),
+                                    "total/loss/gen": commons.serialize_tensor(loss_gen),
+                                    "total/loss/disc": commons.serialize_tensor(loss_disc),
+                                    "total/loss/fm": commons.serialize_tensor(loss_fm),
+                                    "total/loss/mel": commons.serialize_tensor(loss_mel),
+                                    "total/loss/kl": commons.serialize_tensor(loss_kl),
+                                    "aux/loss/harmonic": commons.serialize_tensor(harmonic_loss),
+                                    "aux/loss/tefs": commons.serialize_tensor(tefs_loss),
+                                    "aux/loss/tsi": commons.serialize_tensor(tsi_loss),
+                                    "gradient/grad_norm_disc": commons.serialize_tensor(grad_norm_d),
+                                    "gradient/grad_norm_gen": commons.serialize_tensor(grad_norm_g),
+                                    "gradient/gradient_penalty": commons.serialize_tensor(gradient_penalty),
+                                }),f,indent=2)
 
     if epoch >= hps.total_epoch and rank == 0:
         logger.info("Training is done. The program is closed.")

@@ -419,7 +419,7 @@ class RVCTrainModelNode:
                 train_index=("BOOLEAN",{"default": True}),
                 retrain=("BOOLEAN",{"default": False}),
                 save_best_model=("BOOLEAN",{"default": True}),
-                best_model_threshold=("INT",dict(default=30,min=10,max=50)),
+                best_model_threshold=("INT",dict(default=10,min=1,max=100)),
                 log_every_epoch=("FLOAT",dict(default=1.,min=0.,max=2.,step=.1)),
                 num_workers=("INT",dict(default=1,min=1,max=16))
             )
@@ -448,7 +448,7 @@ class RVCTrainModelNode:
                     train_index=True,
                     retrain=False,
                     save_best_model=True,
-                    best_model_threshold=50,
+                    best_model_threshold=10,
                     log_every_epoch=1.,
                     num_workers=1):
         

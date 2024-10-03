@@ -1,14 +1,15 @@
+from typing import Optional
 import torch
 import torchaudio.transforms as T
 import torch.nn.functional as F
 
 from ..utils import gc_collect
-from ..infer_pack.commons import median_pool1d, minmax_scale
+from ..infer_pack.commons import compute_correlation, median_pool1d, minmax_scale
 
 class LossBalancer:
     model: torch.nn.Module
 
-    def __init__(self, model, initial_weights={}, historical_losses={}, ema_weights={}, epsilon=1e-8, weights_decay=0., loss_decay=.0, active=True, use_pareto=True, use_norm=False):
+    def __init__(self, model: torch.nn.Module, initial_weights: dict={}, historical_losses: dict={}, ema_weights: dict={}, epsilon=1e-8, weights_decay=0., loss_decay=.0, active=True, use_pareto=True, use_norm=False):
         """
         Initializes the LossBalancer with optional initial weights, partial gradient computation, and EMA.
         
@@ -29,7 +30,6 @@ class LossBalancer:
         self.use_pareto = use_pareto # apply the 20/80 rule to loss balancing
         self.use_norm = use_norm
 
-
     def to_dict(self):
         return dict(
             epsilon = self.epsilon,
@@ -45,38 +45,41 @@ class LossBalancer:
 
     def update_ema_weights(self, new_weights):
         """Updates the EMA of the weights."""
-        if not self.ema_weights: self.ema_weights = new_weights
+        if not self.ema_weights: self.ema_weights = dict(**new_weights)
         else: self.ema_weights = {
-                k: self.weights_decay * self.ema_weights.get(k, 0.) + (1 - self.weights_decay) * new_weights[k]
+                k: self.weights_decay * self.ema_weights.get(k, 1.) + (1 - self.weights_decay) * new_weights[k]
                 for k in new_weights
             }
+        return dict(**self.ema_weights)
     
     def update_historical_losses(self, new_losses: dict):
         """Updates the EMA of the weights."""
-        if not self.historical_losses: self.historical_losses = new_losses
+        if not self.historical_losses: self.historical_losses = dict(**new_losses)
         else: 
             for k in new_losses:
                 self.historical_losses[k]=self.loss_decay*self.historical_losses.get(k, 0.) + (1 - self.loss_decay)*new_losses[k]
-                
+        return dict(**self.historical_losses)
 
     def calculate_loss_slope(self, key, current_loss):
         """Calculates the slope of the loss using the current loss and its EMA."""
         ema_loss = self.historical_losses.get(key, current_loss)+self.epsilon
-        slope = abs(current_loss-ema_loss)/ema_loss  # relative loss change
+        slope = (current_loss-ema_loss)/ema_loss  # relative loss change
         return slope
     
-    def calculate_gradients(self, key, current_loss):
+    def calculate_gradients(self, key, current_loss, input):
         """Calculates the gradient norm of the current loss wrt the model params."""
         self.model.zero_grad()  # Clear previous gradients
 
         # Backward pass to output layer
-        model_params = list(self.model.parameters())[-1]
-        output_params = torch.autograd.grad(current_loss, model_params, grad_outputs=torch.ones_like(current_loss, device=model_params.device), retain_graph=True, only_inputs=True)[0]
+        output_params = torch.autograd.grad(current_loss, [input], retain_graph=True, allow_unused=True, materialize_grads=True)[0]
 
         # Compute L2 gradient norm
-        grad_norm = output_params.view(output_params.size(0),-1).norm(2, dim=-1).mean()
-        ema_loss = self.historical_losses.get(key, current_loss)+self.epsilon
-        return grad_norm/ema_loss
+        # grad_norm = output_params.view(output_params.size(0),-1).norm(2, dim=-1).mean()
+        if output_params.ndim>1: grad_norm = output_params.view(output_params.size(0), -1).norm(2, dim=-1).mean()
+        else: grad_norm = output_params.norm(2)
+
+        slope = self.calculate_loss_slope(key, current_loss)
+        return grad_norm * slope
 
     def pareto_normalizer(self, data: dict):
         # Sort the data in descending order based on the values
@@ -104,11 +107,11 @@ class LossBalancer:
         normalized_weights = [w / total_weight for w in weights]
         
         # Combine the keys with their normalized weights
-        normalized_data = {sorted_data[i][0]: normalized_weights[i] for i in range(len(sorted_data))}
+        normalized_data = {sorted_data[i][0]: normalized_weights[i]*len(data) for i in range(len(sorted_data))}
         
         return normalized_data
 
-    def on_train_batch_start(self, losses: dict):
+    def on_train_batch_start(self, losses: dict, input: Optional[torch.Tensor]=None):
         """
         Balances the loss terms based on their gradients before each training batch.
         
@@ -120,26 +123,32 @@ class LossBalancer:
             new_weights (dict): Updated weights for each loss term.
         """
         
-        if not self.initial_weights: self.initial_weights = {k: 1.0 for k in losses} # initialize weights
-        if not self.active: return sum(v*self.initial_weights[k] if k in self.initial_weights else v for k,v in losses.items())
+        if len(losses)==0: return 0. # no losses to balance
+        if not self.initial_weights: self.initial_weights = {k: 1. for k in losses} # initialize weights
+        if not self.ema_weights: self.ema_weights = {k: 1. for k in losses} # initialize ema weights
+        if not self.active:
+            self.update_historical_losses({k: v.item()*self.initial_weights.get(k,1.) for k,v in losses.items() if v>0})
+            return sum(v*self.initial_weights.get(k,1.) for k,v in losses.items())
 
         gradients = {}
         valid_losses = {}
 
         # Process each loss, skip if the corresponding weight is 0
         for key, loss in losses.items():
-            weight = self.initial_weights[key] if key in self.initial_weights else 1.
+            weight = self.initial_weights.get(key, 1.)
             if weight == 0 or loss == 0 or not isinstance(loss,torch.Tensor): continue  # Skip loss with weight 0 or constants
+            weighted_loss = loss * weight
 
-            if self.use_norm:
+            if self.use_norm and input is not None:
                 # Compute L2 gradient norm
-                grad_norm = self.calculate_gradients(key, loss)
-                gradients[key] = grad_norm.item()
+                input.requires_grad_(True)
+                grad_norm = self.calculate_gradients(key, weighted_loss, input)
+                gradients[key] = max(grad_norm.item(), self.epsilon)
             else:
                 # Use loss plateau detection with EMA
-                loss_slope = self.calculate_loss_slope(key, loss)
-                gradients[key] = loss_slope.item()  # Smaller slope -> plateau -> lower priority
-            valid_losses[key] = loss
+                loss_slope = self.calculate_loss_slope(key, weighted_loss)
+                gradients[key] = max(loss_slope.item(), self.epsilon)
+            valid_losses[key] = weighted_loss
 
         if not valid_losses: return torch.tensor(0.0)  # If all losses are skipped
 
@@ -148,7 +157,7 @@ class LossBalancer:
             normalized_weights = self.pareto_normalizer(gradients)
         else:
             total_gradient = sum(gradients.values()) + self.epsilon
-            normalized_weights = {k: w/total_gradient for k, w in gradients.items()}
+            normalized_weights = {k: w/total_gradient*len(gradients) for k, w in gradients.items()}
 
         # Update EMA weights
         self.update_ema_weights(normalized_weights)
@@ -167,12 +176,16 @@ class LossBalancer:
         """
         if weights_decay is not None: self.weights_decay=weights_decay
         if loss_decay is not None: self.loss_decay=loss_decay
-        print(f"|| EMA loss weights: {self.ema_weights} ({self.weights_decay=})")
-        print(f"|| EMA losses: {self.historical_losses} ({self.loss_decay=})")
-        weighted_loss = sum(v*self.ema_weights.get(k,0.) for k,v in self.historical_losses.items())
-        print(f"===> EMA loss: {weighted_loss:.3f} <====")
+        weights = dict(sorted(self.ema_weights.items(),key=lambda x:x[1],reverse=True))
+        losses = dict(sorted(self.historical_losses.items(),key=lambda x:x[1],reverse=True))
+        print(f"|| EMA weights: {weights} ({self.weights_decay=})")
+        print(f"|| EMA losses: {losses} ({self.loss_decay=})")
+        print(f"===> Weighted EMA loss: {self.weighted_ema_loss:.3f} <====")
         gc_collect()
 
+    @property
+    def weighted_ema_loss(self):
+        return sum(v*self.ema_weights.get(k,1./len(self.historical_losses)) for k,v in self.historical_losses.items())
 
 def compute_tsi_loss(original_log_magnitude: torch.Tensor, generated_log_magnitude: torch.Tensor, dim=-1, eps=1e-8):
     """
@@ -189,14 +202,12 @@ def compute_tsi_loss(original_log_magnitude: torch.Tensor, generated_log_magnitu
     generated_envelope = minmax_scale(generated_envelope, eps=eps)
     
     # Compute the correlation
-    numerator = (original_envelope * generated_envelope).sum(dim=-1)
-    denominator = torch.sqrt((original_envelope ** 2).sum(dim=-1) * (generated_envelope ** 2).sum(dim=-1)+eps)
-    correlation = numerator / denominator
+    correlation = compute_correlation(original_envelope, generated_envelope, eps=eps)
     
     # Compute the loss as negative correlation
-    loss = 1-correlation.mean()
+    loss = 1-correlation.abs()
     
-    return loss
+    return loss.mean()
 
 def compute_envelope(log_magnitude: torch.Tensor, dim=-1, kernel_size=3, eps=1e-8):
     """
@@ -261,9 +272,9 @@ def compute_tefs(audio_signal: torch.Tensor, eps=1e-8):
     envelope = minmax_scale(envelope, eps=eps)
 
     # Compute the instantaneous phase from the analytic signal
-    phase = torch.angle(analytic_signal)
+    phase = torch.angle(analytic_signal).cos()
 
-    return envelope, phase
+    return envelope.nan_to_num(0), phase.nan_to_num(0)
 
 def compute_harmonics(mag: torch.Tensor, harmonic_kernel_sizes=[11,17,23], percussive_kernel_sizes=[3,7,13], eps=1e-8):
     # Calculate log-magnitude spectrograms
@@ -285,7 +296,7 @@ def compute_harmonics(mag: torch.Tensor, harmonic_kernel_sizes=[11,17,23], percu
     harmonic = minmax_scale(harmonic, eps=eps)
     percussive = minmax_scale(percussive, eps=eps)
 
-    return harmonic, percussive
+    return harmonic.nan_to_num(0), percussive.nan_to_num(0)
 
 def combined_aux_loss(
         original_audio: torch.Tensor, generated_audio: torch.Tensor,
@@ -333,14 +344,13 @@ def combined_aux_loss(
         # Define loss terms
         harmonic_loss = F.l1_loss(generated_harmonics, original_harmonics)
         harmonic_loss += F.l1_loss(generated_percussives, original_percussives)
-        harmonic_loss *= c_hd
     else: harmonic_loss = 0
 
     # temporal invariant phase
     if c_tsi>0:
         freq_tsi = compute_tsi_loss(org_mag,gen_mag,dim=-1, eps=eps)
         temp_tsi = compute_tsi_loss(org_mag,gen_mag,dim=-2, eps=eps)
-        tsi_loss = (freq_tsi+temp_tsi) * c_tsi
+        tsi_loss = (freq_tsi+temp_tsi)
     else: tsi_loss = 0
 
     # Temperol Envelope and Fine Structure Loss
@@ -348,10 +358,9 @@ def combined_aux_loss(
         # temporal envelope
         gen_te, gen_tfs = compute_tefs(generated_audio, eps=eps)
         org_te, org_tfs = compute_tefs(original_audio, eps=eps)
-        phase_diff = torch.remainder(gen_tfs - org_tfs, 2 * torch.pi)
+        correlation = 1-compute_correlation(gen_tfs,org_tfs, eps=eps).abs()
 
-        tefs_loss = F.l1_loss(gen_te, org_te) +  phase_diff.sin().abs().mean() #F.l1_loss(gen_tfs, org_tfs)
-        tefs_loss*=c_tefs
+        tefs_loss = F.l1_loss(gen_te, org_te) + correlation.mean()
     else: tefs_loss = 0
     
     return harmonic_loss, tefs_loss, tsi_loss
@@ -375,10 +384,12 @@ def gradient_norm_loss(original_audio: torch.Tensor, generated_audio: torch.Tens
             inputs=interpolated,
             grad_outputs=torch.ones_like(output, device=original_audio.device),
             retain_graph=True,
-            only_inputs=True
+            allow_unused=True,
+            materialize_grads=True
         )[0]
-        grad_norm = gradients.view(gradients.size(0), -1).norm(2, dim=-1)+eps
-        loss += torch.log1p((grad_norm - 1) ** 2).mean()
+        if gradients.ndim>1: grad_norm = gradients.view(gradients.size(0), -1).norm(2, dim=-1).mean()
+        else: grad_norm = gradients.norm(2)
+        loss += torch.log1p((grad_norm - 1) ** 2)
     return loss/len(disc_interpolated_output)
 
 def feature_loss(fmap_r, fmap_g):
@@ -390,7 +401,6 @@ def feature_loss(fmap_r, fmap_g):
             loss += torch.mean(torch.abs(rl - gl))
 
     return loss
-
 
 def discriminator_loss(disc_real_outputs, disc_generated_outputs):
     loss = 0

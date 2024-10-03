@@ -71,6 +71,11 @@ def minmax_scale(tensor: torch.Tensor, eps=1e-8):
     tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min() + eps)
     return tensor
 
+def compute_correlation(t1: torch.Tensor, t2: torch.Tensor, eps=1e-8):
+    numerator = (t1 * t2).nan_to_num(0).sum(dim=-1)
+    denominator = torch.sqrt((t1 ** 2).sum(dim=-1) * (t2 ** 2).sum(dim=-1)+eps).nan_to_num(0)
+    return (numerator / denominator).nan_to_num(0)
+
 def init_weights(m, mean=0.0, std=0.01):
     classname = m.__class__.__name__
     if classname.find("Conv") != -1:
