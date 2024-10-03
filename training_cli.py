@@ -594,7 +594,9 @@ def train_and_evaluate(
                     "gradient/gradient_penalty": gradient_penalty,
                     **{f"loss/g/{i}": v for i, v in enumerate(losses_gen)},
                     **{f"loss/d_r/{i}": v for i, v in enumerate(losses_disc_r)},
-                    **{f"loss/d_g/{i}": v for i, v in enumerate(losses_disc_g)}
+                    **{f"loss/d_g/{i}": v for i, v in enumerate(losses_disc_g)},
+                    **{f"balancer/weights/{k}": v for k, v in balancer.ema_weights.items()}
+                    **{f"balancer/losses/{k}": v for k, v in balancer.historical_losses.items()}
                 }
 
                 image_dict = {
@@ -654,13 +656,12 @@ def train_and_evaluate(
         logger.info(f"====> Epoch {epoch} ({total_loss=:.3f}): {global_step=} {lr=:.2E} {epoch_recorder.record()}")
         logger.info(f"|| {loss_disc_all=:.3f}: {loss_disc=:.3f}, {gradient_penalty=:.3f}")
         logger.info(f"|| {loss_gen_all=:.3f}: {loss_gen=:.3f}, {loss_fm=:.3f}, {loss_mel=:.3f}, {loss_kl=:.3f}")
-        logger.info(f"|| {harmonic_loss=:.3f}, {tefs_loss=:.3f}, {tsi_loss=:.3f}")
+        logger.info(f"|| {aux_loss=:.3f}: {harmonic_loss=:.3f}, {tefs_loss=:.3f}, {tsi_loss=:.3f}")
         balancer.on_epoch_end(.5 / (1 + np.exp(-10 * (epoch / hps.total_epoch - 0.16)))+.5) #sigmoid scaling of ema
 
         if total_loss<least_loss:
             least_loss = total_loss
-            logger.info(f"[lowest loss] {least_loss=:.3f}: {loss_disc=:.3f} {gradient_penalty=:.3f} <==> {loss_gen=:.3f} {loss_fm=:.3f} {loss_mel=:.3f} {loss_kl=:.3f}")
-            logger.info(f"[aux] {aux_loss=:.3f}: {harmonic_loss=:.3f}, {tefs_loss=:.3f}, {tsi_loss=:.3f}")
+            logger.info(f"\t>>>[lowest loss]: {least_loss:.3f}<<<")
 
             if hps.save_best_model:
                 if hasattr(net_g, "module"): ckpt = net_g.module.state_dict()
