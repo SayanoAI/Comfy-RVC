@@ -370,6 +370,7 @@ class RVCTrainParamsNode:
                 use_pareto=("BOOLEAN",dict(default=False)),
                 fast_mode=("BOOLEAN",dict(default=False)),
                 fp16_run=("BOOLEAN",dict(default=True)),
+                learning_rate=("FLOAT",dict(default=2e-4,min=1e-8,max=1,step=1e-8))
             )
         }
 
