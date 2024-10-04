@@ -359,6 +359,7 @@ class RVCTrainParamsNode:
         return {
             "optional": dict(
                 batch_size=("INT",dict(default=4,min=1,max=64,step=1)),
+                c_gen=("FLOAT",dict(default=1.,min=0.,max=100.,step=.1)),
                 c_mel=("FLOAT",dict(default=45.,min=0.,max=100.,step=.1)),
                 c_kl=("FLOAT",dict(default=1.,min=0.,max=100.,step=.1)),
                 c_fm=("FLOAT",dict(default=2.,min=0.,max=100.,step=.1)),
@@ -366,6 +367,7 @@ class RVCTrainParamsNode:
                 c_hd=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
                 c_tsi=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
                 c_gp=("FLOAT",dict(default=0.,min=0.,max=100.,step=.1)),
+                use_multiscale=("BOOLEAN",dict(default=False)),
                 use_balancer=("BOOLEAN",dict(default=False)),
                 use_pareto=("BOOLEAN",dict(default=False)),
                 fast_mode=("BOOLEAN",dict(default=False)),

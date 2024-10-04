@@ -31,7 +31,7 @@ from .lib.train.data_utils import (
     TextAudioCollate,
     DistributedBucketSampler,
 )
-from .lib.train.losses import LossBalancer, combined_aux_loss, generator_loss, discriminator_loss, feature_loss, gradient_norm_loss, kl_loss
+from .lib.train.losses import LossBalancer, MultiScaleMelSpectrogramLoss, combined_aux_loss, generator_loss, discriminator_loss, feature_loss, gradient_norm_loss, kl_loss
 from .lib.train.mel_processing import mel_spectrogram_torch, spec_to_mel_torch
 
 def save_checkpoint(ckpt, name, epoch, hps, model_path=None):
@@ -101,7 +101,6 @@ def train_model(hps: "utils.HParams"):
         n_gpus = 1
     
     gpu_devices = hps.gpus.split("-") if hps.gpus else range(n_gpus)
-    
 
     children = {}
     for i, device in enumerate(gpu_devices):
@@ -122,7 +121,8 @@ def train_model(hps: "utils.HParams"):
 
 def run(rank, n_gpus, hps, device):
     print(f"{__name__=}")
-    global global_step, least_loss, loss_file, best_model_name, gradient_clip_value
+    global global_step, least_loss, loss_file, best_model_name, gradient_clip_value, MultiscaleMelLoss
+    MultiscaleMelLoss = MultiScaleMelSpectrogramLoss(hps.data.sampling_rate)
     global_step = 0
     loss_file = os.path.join(hps.model_dir,"losses.json")
     gradient_clip_value = np.log(hps.train.c_gp/hps.train.learning_rate) if hps.train.get("c_gp",0.)>0 else None
@@ -297,7 +297,7 @@ def run(rank, n_gpus, hps, device):
             use_pareto=hps.train.get("use_pareto",False),
             use_norm=not hps.train.get("fast_mode",False),
             initial_weights=dict(
-                loss_gen=1.,
+                loss_gen=hps.train.get("c_gen",1.),
                 loss_fm=hps.train.get("c_fm",2.),
                 loss_mel=hps.train.get("c_mel",45.),
                 loss_kl=hps.train.get("c_kl",1.),
@@ -351,7 +351,7 @@ def train_and_evaluate(
     if writers is not None:
         writer, _ = writers
 
-    global global_step, least_loss, loss_file, best_model_name, gradient_clip_value
+    global global_step, least_loss, loss_file, best_model_name, gradient_clip_value, MultiscaleMelLoss
 
     net_g.train()
     net_d.train()
@@ -532,9 +532,10 @@ def train_and_evaluate(
             # Generator
             y_d_hat_r, y_d_hat_g, fmap_r, fmap_g = net_d(wave, y_hat)
             with autocast(enabled=False):
-                loss_mel = F.l1_loss(y_mel, y_hat_mel) #*hps.train.get("c_mel",0.)
-                loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask) #*hps.train.get("c_kl",0.)
-                loss_fm = feature_loss(fmap_r, fmap_g) #*hps.train.get("c_fm",0.)
+                if hps.train.get("use_multiscale"): loss_mel = MultiscaleMelLoss(y_hat, wave)
+                else: loss_mel = F.l1_loss(y_mel, y_hat_mel)
+                loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask)
+                loss_fm = feature_loss(fmap_r, fmap_g)
                 harmonic_loss, tefs_loss, tsi_loss = combined_aux_loss(
                     wave, y_hat,n_mels=hps.data.n_mel_channels,sample_rate=hps.data.sampling_rate,
                     c_tefs=hps.train.get("c_tefs",0.),
@@ -595,7 +596,7 @@ def train_and_evaluate(
                     **{f"loss/g/{i}": v for i, v in enumerate(losses_gen)},
                     **{f"loss/d_r/{i}": v for i, v in enumerate(losses_disc_r)},
                     **{f"loss/d_g/{i}": v for i, v in enumerate(losses_disc_g)},
-                    **{f"balancer/weights/{k}": v for k, v in balancer.ema_weights.items()}
+                    **{f"balancer/weights/{k}": v for k, v in balancer.ema_weights.items()},
                     **{f"balancer/losses/{k}": v for k, v in balancer.historical_losses.items()}
                 }
 
@@ -603,7 +604,7 @@ def train_and_evaluate(
                     "slice/mel_org": utils.plot_spectrogram_to_numpy(y_mel[0].data.cpu().numpy()),
                     "slice/mel_gen": utils.plot_spectrogram_to_numpy(y_hat_mel[0].data.cpu().numpy()),
                     "all/mel": utils.plot_spectrogram_to_numpy(mel[0].data.cpu().numpy()),
-                    "slice/diff": utils.plot_spectrogram_to_numpy((y_mel[0]-y_hat_mel[0]).abs().data.cpu().numpy(), cmap="hot")
+                    "slice/diff^2": utils.plot_spectrogram_to_numpy((y_mel[0]-y_hat_mel[0]).pow(2).data.cpu().numpy(), cmap="hot")
                 }
 
                 with torch.no_grad():
@@ -643,7 +644,7 @@ def train_and_evaluate(
             optim_d,
             hps.train.learning_rate,
             epoch,
-            os.path.join(hps.model_dir, f"D_{saved_epoch}.pth"),
+            os.path.join(hps.model_dir, f"D_{saved_epoch}.pth")
         )
         if hps.save_every_weights:
             ckpt = net_g.module.state_dict() if hasattr(net_g, "module") else net_g.state_dict()
