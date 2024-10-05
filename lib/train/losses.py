@@ -53,7 +53,8 @@ class LossBalancer:
         """Updates the EMA of the weights."""
         if not self.ema_weights: self.ema_weights = dict(**new_weights)
         else: self.ema_weights = {
-                k: self.weights_decay * self.ema_weights.get(k, 1.) + (1 - self.weights_decay) * new_weights[k]
+                k: np.nan_to_num(
+                    self.weights_decay * self.ema_weights.get(k, 1.) + (1 - self.weights_decay) * new_weights[k],nan=self.epsilon)
                 for k in new_weights
             }
         return dict(**self.ema_weights)
@@ -63,26 +64,26 @@ class LossBalancer:
         if not self.historical_losses: self.historical_losses = dict(**new_losses)
         else: 
             for k,v in new_losses.items():
-                if np.nan_to_num(v,nan=-1)==-1: print(f"{k=} {v=}")
-                self.historical_losses[k]=self.loss_decay*self.historical_losses.get(k, v) + (1 - self.loss_decay)*v
+                self.historical_losses[k]=np.nan_to_num(
+                    self.loss_decay*self.historical_losses.get(k, v) + (1 - self.loss_decay)*v,nan=self.epsilon)
         return dict(**self.historical_losses)
 
     def calculate_loss_slope(self, key: str, current_loss: torch.Tensor):
         """Calculates the slope of the loss using the current loss and its EMA."""
         ema_loss = self.historical_losses.get(key, current_loss)+self.epsilon
         slope = (current_loss-ema_loss)/ema_loss  # relative loss change
-        return slope
+        return slope.abs()
     
     def calculate_gradients(self, key: str, current_loss: torch.Tensor, input: torch.Tensor):
         """Calculates the gradient norm of the current loss wrt the model params."""
         self.model.zero_grad()  # Clear previous gradients
         input.requires_grad_(True)
+        current_loss.requires_grad_(True)
 
         # Backward pass to output layer
         output_params = torch.autograd.grad(current_loss, [input], retain_graph=True, allow_unused=True, materialize_grads=True)[0]
 
         # Compute L2 gradient norm
-        # grad_norm = output_params.view(output_params.size(0),-1).norm(2, dim=-1).mean()
         if output_params.ndim>1: grad_norm = output_params.view(output_params.size(0), -1).norm(2, dim=-1).mean()
         else: grad_norm = output_params.norm(2)
 
@@ -111,12 +112,14 @@ class LossBalancer:
             weights[i] = remaining_weight / (len(sorted_data) - top_20_count)
         
         # Normalize the weights
-        total_weight = sum(weights)
-        normalized_weights = [w / total_weight for w in weights]
+        normalized_weights = {k: weights[i]*v for i,(k,v) in enumerate(sorted_data)}
+        total_weight = sum(normalized_weights.values())
+        if total_weight>self.epsilon: scale = sum(data.values())/total_weight
+        else: scale=self.epsilon
         
         # Combine the keys with their normalized weights
-        normalized_data = {sorted_data[i][0]: normalized_weights[i]*len(data) for i in range(len(sorted_data))}
-        
+        normalized_data = {k: v*scale for k,v in normalized_weights.items()}
+
         return normalized_data
 
     def on_train_batch_start(self, losses: dict, input: Optional[torch.Tensor]=None):
@@ -160,17 +163,17 @@ class LossBalancer:
         if not valid_losses: return torch.tensor(0.0)  # If all losses are skipped
 
         # Calculate loss weights based on gradient magnitudes
-        if self.use_pareto: #20% hardest tasks gets 80% weight
-            normalized_weights = self.pareto_normalizer(gradients)
-        else:
-            total_gradient = sum(gradients.values()) + self.epsilon
-            normalized_weights = {k: w/total_gradient*len(gradients) for k, w in gradients.items()}
+        total_gradient = sum(gradients.values()) + self.epsilon
+        normalized_weights = {k: w/total_gradient*len(gradients) for k, w in gradients.items()}
 
         # Update EMA weights
-        self.update_ema_weights(normalized_weights)
+        if self.use_pareto and len(normalized_weights)>1: #20% hardest tasks gets 80% weight
+            normalized_weights = self.pareto_normalizer(normalized_weights)
+        normalized_weights = self.update_ema_weights(normalized_weights)
+        
         balanced_loss = 0
         for k, loss in valid_losses.items():
-            balanced_loss += self.ema_weights.get(k, 1.) * loss
+            balanced_loss += normalized_weights.get(k, 1.) * loss
             
         # update historical losses
         self.update_historical_losses({k: loss.item() for k, loss in valid_losses.items()})
@@ -576,8 +579,8 @@ class MultiScaleMelSpectrogramLoss(torch.nn.Module):
                 "window_type": s.window_type,
             }
 
-            x_mels = self.mel_spectrogram(x, **kwargs)
-            y_mels = self.mel_spectrogram(y, **kwargs)
+            x_mels = self.mel_spectrogram(x, **kwargs).nan_to_num(self.clamp_eps)
+            y_mels = self.mel_spectrogram(y, **kwargs).nan_to_num(self.clamp_eps)
             x_logmels = torch.log10(x_mels.pow(self.pow)+self.clamp_eps).nan_to_num(self.clamp_eps)
             y_logmels = torch.log10(y_mels.pow(self.pow)+self.clamp_eps).nan_to_num(self.clamp_eps)
 
@@ -598,24 +601,27 @@ def discriminator_loss(
         disc_generated_outputs: List[torch.Tensor]
         ):
     loss = 0
-    r_losses = []
-    g_losses = []
+    # r_losses = []
+    # g_losses = []
+    disc_losses = []
     for dr, dg in zip(disc_real_outputs, disc_generated_outputs):
         r_loss = torch.mean((1 - dr) ** 2)
         g_loss = torch.mean(dg**2)
-        loss += r_loss + g_loss
-        r_losses.append(r_loss.item())
-        g_losses.append(g_loss.item())
-    return loss, r_losses, g_losses
+        L = r_loss + g_loss
+        loss += L
+        # r_losses.append(r_loss.item())
+        # g_losses.append(g_loss.item())
+        disc_losses.append(L)
+    return loss, disc_losses
 
 
 def generator_loss(disc_outputs: List[torch.Tensor]):
     loss = 0
     gen_losses = []
     for dg in disc_outputs:
-        l = torch.mean((1 - dg) ** 2)
-        gen_losses.append(l)
-        loss += l
+        L = torch.mean((1 - dg) ** 2)
+        gen_losses.append(L)
+        loss += L
     return loss, gen_losses
 
 

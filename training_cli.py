@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import traceback
+from typing import Tuple
 import numpy as np
 
 from tqdm import tqdm
@@ -285,10 +286,10 @@ def run(rank, n_gpus, hps, device):
     try:
         balancer_state = g_kwargs["balancer"]
         logger.info(f"Using existing balancer: {balancer_state}")
-        balancer = LossBalancer(net_g,**balancer_state)
+        balancer_g = LossBalancer(net_g,**balancer_state)
     except Exception as e:
         logger.error(f"Failed to load balancer state: {e}")
-        balancer = LossBalancer(
+        balancer_g = LossBalancer(
             net_g,            
             weights_decay=.5 / (1 + np.exp(-10 * (epoch_str / hps.total_epoch - 0.16)))+.5, #sigmoid scaled ema .8 at 20% epoch
             loss_decay=.8,
@@ -297,13 +298,32 @@ def run(rank, n_gpus, hps, device):
             use_pareto=hps.train.get("use_pareto",False),
             use_norm=not hps.train.get("fast_mode",False),
             initial_weights=dict(
-                loss_gen=hps.train.get("c_gen",1.),
+                loss_gen=hps.train.get("c_adv",1.),
                 loss_fm=hps.train.get("c_fm",2.),
                 loss_mel=hps.train.get("c_mel",45.),
                 loss_kl=hps.train.get("c_kl",1.),
                 harmonic_loss=hps.train.get("c_hd",0.),
                 tsi_loss=hps.train.get("c_tsi",0.),
                 tefs_loss=hps.train.get("c_tefs",0.),
+            ))
+        
+    try:
+        balancer_state = d_kwargs["balancer"]
+        logger.info(f"Using existing balancer: {balancer_state}")
+        balancer_d = LossBalancer(net_d,**balancer_state)
+    except Exception as e:
+        logger.error(f"Failed to load balancer state: {e}")
+        balancer_d = LossBalancer(
+            net_d,            
+            weights_decay=.5 / (1 + np.exp(-10 * (epoch_str / hps.total_epoch - 0.16)))+.5, #sigmoid scaled ema .8 at 20% epoch
+            loss_decay=.8,
+            epsilon=hps.train.eps,
+            active=hps.train.get("use_balancer",False),
+            use_pareto=hps.train.get("use_pareto",False),
+            use_norm=not hps.train.get("fast_mode",False),
+            initial_weights=dict(
+                loss_disc=hps.train.get("c_adv",1.),
+                gradient_penalty=hps.train.get("c_gp",0.),
             ))
     cache = []
     for epoch in range(epoch_str, hps.train.epochs + 1):
@@ -321,7 +341,7 @@ def run(rank, n_gpus, hps, device):
                 logger,
                 [writer, writer_eval],
                 cache,
-                balancer
+                [balancer_g, balancer_d]
             )
         else:
             train_and_evaluate(
@@ -336,14 +356,14 @@ def run(rank, n_gpus, hps, device):
                 None,
                 None,
                 cache,
-                balancer
+                [balancer_g, balancer_d]
             )
         scheduler_g.step()
         scheduler_d.step()
 
 
 def train_and_evaluate(
-    rank, epoch, hps, nets, optims, _, scaler, loaders, logger, writers, cache, balancer: "LossBalancer"
+    rank, epoch, hps, nets, optims, _, scaler, loaders, logger, writers, cache, balancer: Tuple["LossBalancer","LossBalancer"]
 ):
     net_g, net_d = nets
     optim_g, optim_d = optims
@@ -355,6 +375,7 @@ def train_and_evaluate(
 
     net_g.train()
     net_d.train()
+    balancer_g, balancer_d = balancer
 
     # Prepare data iterator
     if hps.if_cache_data_in_gpu:
@@ -519,8 +540,11 @@ def train_and_evaluate(
             
             with autocast(enabled=False):
                 gradient_penalty = gradient_norm_loss(wave,gen_wave, net_d, eps=hps.train.eps)*hps.train.c_gp if hps.train.get("c_gp",0.)>0 else 0
-                loss_disc, losses_disc_r, losses_disc_g = discriminator_loss(y_d_hat_r, y_d_hat_g)
-                loss_disc_all = loss_disc+gradient_penalty
+                loss_disc, losses_disc = discriminator_loss(y_d_hat_r, y_d_hat_g)
+                loss_disc_all = balancer_d.on_train_batch_start(dict(
+                    loss_disc=loss_disc,
+                    gradient_penalty=gradient_penalty                    
+                    ),input=y_hat)
 
             optim_d.zero_grad()
             scaler.scale(loss_disc_all).backward()
@@ -548,7 +572,7 @@ def train_and_evaluate(
                 )
                 loss_gen, losses_gen = generator_loss(y_d_hat_g)
                 aux_loss = harmonic_loss + tefs_loss + tsi_loss
-                loss_gen_all = balancer.on_train_batch_start(dict(
+                loss_gen_all = balancer_g.on_train_batch_start(dict(
                     loss_gen=loss_gen,
                     loss_fm=loss_fm,
                     loss_mel=loss_mel,
@@ -594,10 +618,9 @@ def train_and_evaluate(
                     "gradient/grad_norm_gen": grad_norm_g,
                     "gradient/gradient_penalty": gradient_penalty,
                     **{f"loss/g/{i}": v for i, v in enumerate(losses_gen)},
-                    **{f"loss/d_r/{i}": v for i, v in enumerate(losses_disc_r)},
-                    **{f"loss/d_g/{i}": v for i, v in enumerate(losses_disc_g)},
-                    **{f"balancer/weights/{k}": v for k, v in balancer.ema_weights.items()},
-                    **{f"balancer/losses/{k}": v for k, v in balancer.historical_losses.items()}
+                    **{f"loss/d/{i}": v for i, v in enumerate(losses_disc)},
+                    **{f"balancer_g/weights/{k}": v for k, v in balancer_g.ema_weights.items()},
+                    **{f"balancer_d/weights/{k}": v for k, v in balancer_d.ema_weights.items()},
                 }
 
                 image_dict = {
@@ -637,14 +660,15 @@ def train_and_evaluate(
             hps.train.learning_rate,
             epoch,
             os.path.join(hps.model_dir, f"G_{saved_epoch}.pth"),
-            balancer=balancer.to_dict()
+            balancer=balancer_g.to_dict()
         )
         utils.save_checkpoint(
             net_d,
             optim_d,
             hps.train.learning_rate,
             epoch,
-            os.path.join(hps.model_dir, f"D_{saved_epoch}.pth")
+            os.path.join(hps.model_dir, f"D_{saved_epoch}.pth"),
+            balancer=balancer_d.to_dict()
         )
         if hps.save_every_weights:
             ckpt = net_g.module.state_dict() if hasattr(net_g, "module") else net_g.state_dict()
@@ -653,12 +677,13 @@ def train_and_evaluate(
             logger.info(f"saving ckpt {save_name}: {status}")
 
     if rank == 0:
-        total_loss = balancer.weighted_ema_loss + loss_disc_all
+        total_loss = balancer_g.weighted_ema_loss + balancer_d.weighted_ema_loss
         logger.info(f"====> Epoch {epoch} ({total_loss=:.3f}): {global_step=} {lr=:.2E} {epoch_recorder.record()}")
         logger.info(f"|| {loss_disc_all=:.3f}: {loss_disc=:.3f}, {gradient_penalty=:.3f}")
         logger.info(f"|| {loss_gen_all=:.3f}: {loss_gen=:.3f}, {loss_fm=:.3f}, {loss_mel=:.3f}, {loss_kl=:.3f}")
         logger.info(f"|| {aux_loss=:.3f}: {harmonic_loss=:.3f}, {tefs_loss=:.3f}, {tsi_loss=:.3f}")
-        balancer.on_epoch_end(.5 / (1 + np.exp(-10 * (epoch / hps.total_epoch - 0.16)))+.5) #sigmoid scaling of ema
+        balancer_g.on_epoch_end(.5 / (1 + np.exp(-10 * (epoch / hps.total_epoch - 0.16)))+.5) #sigmoid scaling of ema
+        balancer_d.on_epoch_end(.5 / (1 + np.exp(-10 * (epoch / hps.total_epoch - 0.16)))+.5) #sigmoid scaling of ema
 
         if total_loss<least_loss:
             least_loss = total_loss
@@ -674,7 +699,7 @@ def train_and_evaluate(
             
             with open(loss_file,"w") as f:
                 json.dump(dict(least_loss=least_loss.item(),best_model_name=best_model_name,epoch=epoch,steps=global_step,
-                                loss_weights = dict(balancer.ema_weights),
+                                loss_weights = dict(**balancer_g.ema_weights,**balancer_d.ema_weights),
                                 scalar_dict={
                                     "total/loss/all": commons.serialize_tensor(loss_gen_all+loss_disc_all),
                                     "total/loss/gen_all": commons.serialize_tensor(loss_gen_all),

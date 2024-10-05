@@ -359,7 +359,7 @@ class RVCTrainParamsNode:
         return {
             "optional": dict(
                 batch_size=("INT",dict(default=4,min=1,max=64,step=1)),
-                c_gen=("FLOAT",dict(default=1.,min=0.,max=100.,step=.1)),
+                c_adv=("FLOAT",dict(default=1.,min=0.,max=100.,step=.1)),
                 c_mel=("FLOAT",dict(default=45.,min=0.,max=100.,step=.1)),
                 c_kl=("FLOAT",dict(default=1.,min=0.,max=100.,step=.1)),
                 c_fm=("FLOAT",dict(default=2.,min=0.,max=100.,step=.1)),
@@ -372,7 +372,7 @@ class RVCTrainParamsNode:
                 use_pareto=("BOOLEAN",dict(default=False)),
                 fast_mode=("BOOLEAN",dict(default=False)),
                 fp16_run=("BOOLEAN",dict(default=True)),
-                learning_rate=("FLOAT",dict(default=2e-4,min=1e-8,max=1,step=1e-8))
+                learning_rate=("FLOAT",dict(default=1e-4,min=1e-8,max=1,step=1e-8))
             )
         }
 
@@ -421,7 +421,7 @@ class RVCTrainModelNode:
                 train_index=("BOOLEAN",{"default": True}),
                 retrain=("BOOLEAN",{"default": False}),
                 save_best_model=("BOOLEAN",{"default": True}),
-                best_model_threshold=("INT",dict(default=10,min=1,max=100)),
+                best_model_threshold=("INT",dict(default=30,min=1,max=100)),
                 log_every_epoch=("FLOAT",dict(default=1.,min=0.,max=2.,step=.1)),
                 num_workers=("INT",dict(default=1,min=1,max=16))
             )
