@@ -112,7 +112,6 @@ class TextAudioLoaderMultiNSFsid(torch.utils.data.Dataset):
                 spec = spectrogram_torch(
                     audio_norm,
                     self.filter_length,
-                    self.sampling_rate,
                     self.hop_length,
                     self.win_length,
                     center=False,
@@ -123,7 +122,6 @@ class TextAudioLoaderMultiNSFsid(torch.utils.data.Dataset):
             spec = spectrogram_torch(
                 audio_norm,
                 self.filter_length,
-                self.sampling_rate,
                 self.hop_length,
                 self.win_length,
                 center=False,
@@ -304,7 +302,6 @@ class TextAudioLoader(torch.utils.data.Dataset):
                 spec = spectrogram_torch(
                     audio_norm,
                     self.filter_length,
-                    self.sampling_rate,
                     self.hop_length,
                     self.win_length,
                     center=False,
@@ -315,7 +312,6 @@ class TextAudioLoader(torch.utils.data.Dataset):
             spec = spectrogram_torch(
                 audio_norm,
                 self.filter_length,
-                self.sampling_rate,
                 self.hop_length,
                 self.win_length,
                 center=False,
