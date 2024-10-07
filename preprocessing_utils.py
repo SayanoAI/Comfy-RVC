@@ -5,7 +5,7 @@ from .lib.slicer2 import Slicer
 import traceback
 from scipy.io import wavfile
 from .pitch_extraction import FeatureExtractor
-from .lib.audio import load_input_audio, remix_audio, AudioProcessor
+from .lib.audio import hz_to_mel, load_input_audio, remix_audio, AudioProcessor
 from .lib.utils import gc_collect
 from .config import config
 import torch
@@ -14,7 +14,7 @@ class Preprocess:
     def __init__(self, sr, exp_dir, preprocessor: "AudioProcessor"=None, noparallel=True, period=3.0, overlap=.3, max_volume=.95):
         self.slicer = Slicer(
             sr=sr,
-            threshold=-42,
+            threshold=-50,
             min_length=1500,
             min_interval=400,
             hop_size=15,
@@ -112,8 +112,8 @@ class FeatureInput(FeatureExtractor):
         self.f0_bin = 256
         self.f0_max = 1100.0
         self.f0_min = 50.0
-        self.f0_mel_min = 1127 * np.log(1 + self.f0_min / 700)
-        self.f0_mel_max = 1127 * np.log(1 + self.f0_max / 700)
+        self.f0_mel_min = hz_to_mel(self.f0_min)
+        self.f0_mel_max = hz_to_mel(self.f0_max)
 
         self.model = model
         

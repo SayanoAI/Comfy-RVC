@@ -1,7 +1,8 @@
 import onnxruntime
 import librosa
 import numpy as np
-import soundfile
+
+from ..audio import hz_to_mel
 
 
 class ContentVec:
@@ -79,6 +80,7 @@ class OnnxRVC:
         self.model = onnxruntime.InferenceSession(model_path, providers=providers)
         self.sampling_rate = sr
         self.hop_size = hop_size
+        self.f0_bins = 256
 
     def forward(self, hubert, hubert_length, pitch, pitchf, ds, rnd):
         onnx_input = {
@@ -102,8 +104,8 @@ class OnnxRVC:
     ):
         f0_min = 50
         f0_max = 1100
-        f0_mel_min = 1127 * np.log(1 + f0_min / 700)
-        f0_mel_max = 1127 * np.log(1 + f0_max / 700)
+        f0_mel_min = hz_to_mel(f0_min)
+        f0_mel_max = hz_to_mel(f0_max)
         f0_predictor = get_f0_predictor(
             f0_method,
             hop_length=self.hop_size,
@@ -125,12 +127,9 @@ class OnnxRVC:
         pitchf = f0_predictor.compute_f0(wav, hubert_length)
         pitchf = pitchf * 2 ** (f0_up_key / 12)
         pitch = pitchf.copy()
-        f0_mel = 1127 * np.log(1 + pitch / 700)
-        f0_mel[f0_mel > 0] = (f0_mel[f0_mel > 0] - f0_mel_min) * 254 / (
-            f0_mel_max - f0_mel_min
-        ) + 1
-        f0_mel[f0_mel <= 1] = 1
-        f0_mel[f0_mel > 255] = 255
+        f0_mel = hz_to_mel(pitch)
+        f0_mel =  (f0_mel - f0_mel_min)*(self.f0_bins-2)/(f0_mel_max - f0_mel_min) + 1
+        f0_mel = np.clip(f0_mel, a_min=1, a_max=self.f0_bins-1)
         pitch = np.rint(f0_mel).astype(np.int64)
 
         pitchf = pitchf.reshape(1, len(pitchf)).astype(np.float32)

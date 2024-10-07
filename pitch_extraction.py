@@ -6,7 +6,7 @@ from scipy import signal
 import torch
 
 from .lib.rmvpe import RMVPE
-from .lib.audio import autotune_f0, pad_audio
+from .lib.audio import autotune_f0, pad_audio, hz_to_mel
 from .lib import BASE_MODELS_DIR
 from .lib.utils import gc_collect, get_merge_func, get_optimal_threads, get_optimal_torch_device
 
@@ -20,14 +20,15 @@ class FeatureExtractor:
             config.is_half,
         )
         
-        self.sr = 16000  # hubert输入采样率
-        self.window = 160  # 每帧点数
-        self.t_pad = self.sr * self.x_pad  # 每条前后pad时间
+        self.sr = 16000  # hubert sr
+        self.window = 160
+        self.f0_bins = 256
+        self.t_pad = self.sr * self.x_pad
         self.t_pad_tgt = tgt_sr * self.x_pad
         self.t_pad2 = self.t_pad * 2
-        self.t_query = self.sr * self.x_query  # 查询切点前后查询时间
-        self.t_center = self.sr * self.x_center  # 查询切点位置
-        self.t_max = self.sr * self.x_max  # 免查询时长阈值
+        self.t_query = self.sr * self.x_query
+        self.t_center = self.sr * self.x_center
+        self.t_max = self.sr * self.x_max
         self.device = config.device
         self.onnx = onnx
         self.f0_method_dict = {
@@ -193,7 +194,7 @@ class FeatureExtractor:
 
         return self.model_rmvpe.infer_from_audio(x, thred=0.03)
 
-    def get_pitch_dependant_rmvpe(self, x, f0_min=1, f0_max=40000, *args, **kwargs):
+    def get_pitch_dependant_rmvpe(self, x, f0_min=0, f0_max=40000, *args, **kwargs):
         if not hasattr(self,"model_rmvpe"):
             self.model_rmvpe = RMVPE(os.path.join(BASE_MODELS_DIR,f"rmvpe.{'onnx' if self.onnx else 'pt'}"), is_half=self.is_half, device=self.device, onnx=self.onnx)
 
@@ -262,8 +263,8 @@ class FeatureExtractor:
         **kwargs
     ):
         time_step = self.window / self.sr * 1000
-        f0_mel_min = 1127 * np.log(1 + f0_min / 700)
-        f0_mel_max = 1127 * np.log(1 + f0_max / 700)
+        f0_mel_min = hz_to_mel(f0_min)
+        f0_mel_max = hz_to_mel(f0_max)
         params = {'x': x, 'f0_up_key': f0_up_key, 'f0_min': f0_min, 
           'f0_max': f0_max, 'time_step': time_step, 'filter_radius': filter_radius, 
           'crepe_hop_length': crepe_hop_length, 'model': "full", 'onnx': rmvpe_onnx
@@ -295,12 +296,9 @@ class FeatureExtractor:
             ]
         
         # f0bak = f0.copy()
-        f0_mel = 1127 * np.log(1 + f0 / 700)
-        f0_mel[f0_mel > 0] = (f0_mel[f0_mel > 0] - f0_mel_min) * 254 / (
-            f0_mel_max - f0_mel_min
-        ) + 1
-        f0_mel[f0_mel <= 1] = 1
-        f0_mel[f0_mel > 255] = 255
+        f0_mel = hz_to_mel(f0)
+        f0_mel =  (f0_mel - f0_mel_min)*(self.f0_bins-2)/(f0_mel_max - f0_mel_min) + 1
+        f0_mel = np.clip(f0_mel, a_min=1, a_max=self.f0_bins-1)
         f0_coarse = np.rint(f0_mel).astype(np.int16)
 
         return f0_coarse, f0  # 1-0

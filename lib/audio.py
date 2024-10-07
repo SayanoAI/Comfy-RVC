@@ -50,21 +50,24 @@ class AudioProcessor:
         return get_hash(*values)
 
     def __call__(self, audio):
-        from .karafan.audio_utils import Normalize, Silent
-
+        
         samples,sr = get_audio(audio)
         
         if self.threshold_silence:
+            from .karafan.audio_utils import Silent
             samples = np.atleast_2d([samples])
             samples = Silent(samples, sample_rate=sr, threshold_dB=self.silence_threshold_db)
             samples = np.squeeze(samples, 0)
-        if self.dynamic_threshold: samples = self.dynamic_thresholding(
+        if self.dynamic_threshold:
+            samples = self.dynamic_thresholding(
             samples,
             multiplier=self.multiplier,
             sample_size=self.sample_size,
             method=self.fill_method,
             kernel_size=self.kernel_size)
-        if self.normalize: samples = Normalize(samples,threshold_dB=self.normalize_threshold_db)
+        if self.normalize:
+            from .karafan.audio_utils import Normalize
+            samples = Normalize(samples,threshold_dB=self.normalize_threshold_db)
 
         return samples, sr
 
@@ -298,3 +301,7 @@ def autotune_f0(f0, threshold=0.):
             autotuned_f0.append(y)
     # Return the result as a numpy array
     return np.array(autotuned_f0, dtype="float32")
+
+def hz_to_mel(hz: "np.ndarray"):
+    # 1127 * np.log(1 + f0_min / 700)
+    return 2595 * np.log10(1 + hz / 700) # from wikipedia

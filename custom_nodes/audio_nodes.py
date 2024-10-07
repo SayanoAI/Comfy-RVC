@@ -14,13 +14,10 @@ CATEGORY = "🌺RVC-Studio/audio"
 input_path = folder_paths.get_input_directory()
 temp_path = folder_paths.get_temp_directory()
 
-def to_audio_dict(audio, sr):
-    #from https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite/blob/bf2a9402d0b2727c7170c43621d569f4d531015f/videohelpersuite/nodes.py#L706C22-L706C67
-    
-    waveform = torch.from_numpy(audio).reshape((-1,audio.ndim)).transpose(0,1).unsqueeze(0) 
-    print(f"{waveform.shape=} {waveform.ndim=} {audio.shape=} {audio.ndim=}")
+def to_audio_dict(audio: "np.ndarray", sr: int):
+    audio = np.atleast_2d(audio)
+    waveform = torch.from_numpy(audio.reshape((-1,audio.shape[0]))).transpose(0,1).unsqueeze(0)
     return dict(waveform=waveform,sample_rate=sr)
-
 
 class LoadAudio:
     @classmethod
