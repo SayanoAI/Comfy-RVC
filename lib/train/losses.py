@@ -1,13 +1,12 @@
 from collections import namedtuple
-import functools
-from typing import Callable, List, Optional
-import typing
-from librosa.filters import mel as librosa_mel_fn
+from typing import Callable, List, Literal, Optional
+import librosa
 import numpy as np
-from scipy import signal
 import torch
 import torchaudio.transforms as T
 import torch.nn.functional as F
+
+from .mel_processing import mel_spectrogram_torch, spectral_de_normalize_torch
 
 from ..utils import gc_collect
 from ..infer_pack.commons import compute_correlation, median_pool1d, minmax_scale
@@ -81,46 +80,59 @@ class LossBalancer:
         current_loss.requires_grad_(True)
 
         # Backward pass to output layer
-        output_params = torch.autograd.grad(current_loss, [input], retain_graph=True, allow_unused=True, materialize_grads=True)[0]
+        output_params = torch.autograd.grad(current_loss, [input], retain_graph=True, allow_unused=True, materialize_grads=True)[0].nan_to_num(self.epsilon)
 
         # Compute L2 gradient norm
         if output_params.ndim>1: grad_norm = output_params.view(output_params.size(0), -1).norm(2, dim=-1).mean()
         else: grad_norm = output_params.norm(2)
 
-        slope = self.calculate_loss_slope(key, current_loss)
-        return grad_norm * slope
+        if grad_norm<=self.epsilon: #use slope as fallback
+            grad_norm = self.calculate_loss_slope(key, current_loss)
 
-    def pareto_normalizer(self, data: dict):
-        # Sort the data in descending order based on the values
-        sorted_data = sorted(data.items(), key=lambda x: x[1], reverse=True)
-        
-        # Calculate the number of elements in the top 20%
-        top_20_count = max(int(0.2 * len(sorted_data)),1)
-        
-        # Calculate the weights
-        weights = np.zeros(len(sorted_data))
-        total_weight = 1.0
-        top_20_weight = 0.8 * total_weight
-        remaining_weight = total_weight - top_20_weight
-        
-        # Assign weights to the top 20%
-        for i in range(top_20_count):
-            weights[i] = top_20_weight / top_20_count
-        
-        # Assign weights to the remaining 80%
-        for i in range(top_20_count, len(sorted_data)):
-            weights[i] = remaining_weight / (len(sorted_data) - top_20_count)
-        
-        # Normalize the weights
-        normalized_weights = {k: weights[i]*v for i,(k,v) in enumerate(sorted_data)}
-        total_weight = sum(normalized_weights.values())
-        if total_weight>self.epsilon: scale = sum(data.values())/total_weight
-        else: scale=self.epsilon
-        
-        # Combine the keys with their normalized weights
-        normalized_data = {k: v*scale for k,v in normalized_weights.items()}
+        return grad_norm
 
-        return normalized_data
+    def pareto_normalizer(self, loss_dict: dict, weight=.8):
+        """
+        Normalize losses based on the Pareto Principle (80/20 rule).
+        
+        Parameters:
+        loss_dict (dict): Dictionary of loss values with keys as identifiers.
+        
+        Returns:
+        dict: Dictionary of normalized loss values.
+        """
+        # Extract keys and values from the dictionary
+        keys = list(loss_dict.keys())
+        losses = np.array(list(loss_dict.values()))
+        
+        # Calculate the total loss
+        total_loss = np.sum(losses)
+        
+        # Calculate the contribution of each loss
+        contributions = losses / total_loss
+        
+        # Sort contributions in descending order
+        sorted_indices = np.argsort(contributions)[::-1]
+        sorted_contributions = contributions[sorted_indices]
+        
+        # Calculate cumulative contributions
+        cumulative_contributions = np.cumsum(sorted_contributions)
+        
+        # Identify the top 20% contributors
+        top_20_percent_index = np.argmax(cumulative_contributions >= weight)
+        
+        # Create a weight array based on the Pareto Principle
+        weights = np.ones_like(losses)
+        weights[sorted_indices[:top_20_percent_index + 1]] = len(losses) # Give more weight to the top 20%
+        
+        # Normalize the losses
+        normalized_losses = losses * weights
+        normalized_losses /= np.sum(normalized_losses) + self.epsilon
+        
+        # Create a dictionary of normalized losses
+        normalized_loss_dict = {keys[i]: normalized_losses[i] for i in range(len(keys))}
+        
+        return normalized_loss_dict
 
     def on_train_batch_start(self, losses: dict, input: Optional[torch.Tensor]=None):
         """
@@ -160,23 +172,29 @@ class LossBalancer:
                 gradients[key] = max(loss_slope.item(), self.epsilon)
             valid_losses[key] = weighted_loss.nan_to_num(self.epsilon)
 
-        if not valid_losses: return torch.tensor(0.0)  # If all losses are skipped
+        if not valid_losses or not gradients: return torch.tensor(0.0)  # If all losses are skipped
+
+        # update historical losses
+        historical_losses = self.update_historical_losses({k: loss.item() for k, loss in valid_losses.items()})
 
         # Calculate loss weights based on gradient magnitudes
-        total_gradient = sum(gradients.values()) + self.epsilon
-        normalized_weights = {k: w/total_gradient*len(gradients) for k, w in gradients.items()}
+        if len(valid_losses)>1:
+            if self.use_pareto: pareto_weights = self.pareto_normalizer(historical_losses)
+            else: pareto_weights = {}
+            inverse_total_gradient = 1./(sum(gradients.values()) + self.epsilon)
+            normalized_weights = {}
+            for k, w in gradients.items():
+                w_ratio = w * inverse_total_gradient
+                normalized_weights[k] = 1. + (w_ratio + pareto_weights.get(k, w_ratio)) / 2.
+        else: normalized_weights = {k: 1. for k in valid_losses.keys()}
 
         # Update EMA weights
-        if self.use_pareto and len(normalized_weights)>1: #20% hardest tasks gets 80% weight
-            normalized_weights = self.pareto_normalizer(normalized_weights)
         normalized_weights = self.update_ema_weights(normalized_weights)
         
+        # Balance losses
         balanced_loss = 0
         for k, loss in valid_losses.items():
             balanced_loss += normalized_weights.get(k, 1.) * loss
-            
-        # update historical losses
-        self.update_historical_losses({k: loss.item() for k, loss in valid_losses.items()})
         
         return balanced_loss
 
@@ -208,14 +226,14 @@ def compute_tsi_loss(original_log_magnitude: torch.Tensor, generated_log_magnitu
     generated_envelope = compute_envelope(generated_log_magnitude, eps=eps, dim=dim)
 
     # Normalize the envelope
-    original_envelope = minmax_scale(original_envelope, eps=eps)
-    generated_envelope = minmax_scale(generated_envelope, eps=eps)
+    # original_envelope = minmax_scale(original_envelope, eps=eps)
+    # generated_envelope = minmax_scale(generated_envelope, eps=eps)
     
     # Compute the correlation
     correlation = compute_correlation(original_envelope, generated_envelope, eps=eps)
     
     # Compute the loss as negative correlation
-    loss = 1-correlation.abs()
+    loss = 1-correlation
     
     return loss.mean()
 
@@ -282,21 +300,19 @@ def compute_tefs(audio_signal: torch.Tensor, eps=1e-8):
     envelope = minmax_scale(envelope, eps=eps)
 
     # Compute the instantaneous phase from the analytic signal
-    phase = torch.angle(analytic_signal).cos()
+    phase = torch.angle(analytic_signal).diff().cos()
 
     return envelope.nan_to_num(eps), phase.nan_to_num(eps)
 
-def compute_harmonics(mag: torch.Tensor, harmonic_kernel_sizes=[11,17,23], percussive_kernel_sizes=[3,7,13], eps=1e-8):
-    # Calculate log-magnitude spectrograms
-
+def compute_harmonics(mag: torch.Tensor, kernel_sizes=[3, 7, 13, 19, 29], eps=1e-8):
+    D = mag.detach().float().cpu().abs().numpy()
     harmonic_list = []
     percussive_list = []
 
-    for kernel_size in harmonic_kernel_sizes:
-        harmonic_list.append(median_pool1d(mag, kernel_size=kernel_size, dim=-1).nan_to_num(eps).view(mag.size(0),-1))
-
-    for kernel_size in percussive_kernel_sizes:
-        percussive_list.append(median_pool1d(mag, kernel_size=kernel_size, dim=-2).nan_to_num(eps).view(mag.size(0),-1))
+    for kernel_size in kernel_sizes:
+        H, P = librosa.decompose.hpss(D,kernel_size=kernel_size)
+        harmonic_list.append(torch.from_numpy(H).to(device=mag.device))
+        percussive_list.append(torch.from_numpy(P).to(device=mag.device))
 
     # Concatenate the results
     harmonic = torch.cat(harmonic_list, dim=-1)
@@ -311,8 +327,7 @@ def compute_harmonics(mag: torch.Tensor, harmonic_kernel_sizes=[11,17,23], percu
 def combined_aux_loss(
         original_audio: torch.Tensor, generated_audio: torch.Tensor,
         c_tefs=1., c_hd=1., c_tsi=1., n_mels=128, sample_rate=40000,
-        n_fft=1024, hop_length=320, win_length=1024,
-        eps=None):
+        n_fft=1024, hop_length=320, win_length=1024, fmin=0, fmax=None, eps=None):
 
     kernel_size = n_fft//hop_length+1
     if kernel_size % 2 == 0: kernel_size+=1 #enforce odd kernel size
@@ -320,32 +335,26 @@ def combined_aux_loss(
 
     # Compute STFT once
     if c_hd+c_tsi>0:
-        
-        hann_window = torch.hann_window(win_length).to(
-            dtype=original_audio.dtype, device=original_audio.device
+        org_mag = mel_spectrogram_torch(
+            original_audio,
+            n_fft,
+            n_mels,
+            sample_rate,
+            hop_length,
+            win_length,
+            fmin,
+            fmax,
         )
-        generated_stft = torch.stft(
-            generated_audio.view(-1,generated_audio.size(-1)),
-            n_fft=n_fft,
-            hop_length=hop_length,
-            win_length=win_length,
-            window=hann_window,
-            return_complex=True,
-            onesided=True,
-            center=False)
-        original_stft = torch.stft(
-            original_audio.view(-1,original_audio.size(-1)),
-            n_fft=n_fft,
-            hop_length=hop_length,
-            win_length=win_length,
-            window=hann_window,
-            return_complex=True,
-            onesided=True,
-            center=False)
-        
-        MelScaler = T.MelScale(n_mels=n_mels, sample_rate=sample_rate, n_stft=n_fft // 2 + 1).to(original_audio.device)
-        org_mag = MelScaler(original_stft.abs()+eps)
-        gen_mag = MelScaler(generated_stft.abs()+eps)
+        gen_mag = mel_spectrogram_torch(
+            generated_audio,
+            n_fft,
+            n_mels,
+            sample_rate,
+            hop_length,
+            win_length,
+            fmin,
+            fmax,
+        )
     
     # Harmonic Loss
     if c_hd>0:
@@ -365,12 +374,9 @@ def combined_aux_loss(
 
     # Temperol Envelope and Fine Structure Loss
     if c_tefs>0:
-        # temporal envelope
         gen_te, gen_tfs = compute_tefs(generated_audio, eps=eps)
         org_te, org_tfs = compute_tefs(original_audio, eps=eps)
-        correlation = 1-compute_correlation(gen_tfs,org_tfs, eps=eps).abs()
-
-        tefs_loss = F.l1_loss(gen_te, org_te) + correlation.mean()
+        tefs_loss = F.l1_loss(gen_te, org_te) + F.l1_loss(gen_tfs, org_tfs)
     else: tefs_loss = 0
     
     return harmonic_loss, tefs_loss, tsi_loss
@@ -405,189 +411,138 @@ def gradient_norm_loss(original_audio: torch.Tensor, generated_audio: torch.Tens
 # Adapted from https://github.com/NVIDIA/BigVGAN/blob/main/loss.py
 # LICENSE: https://github.com/NVIDIA/BigVGAN/blob/main/LICENSE
 class MultiScaleMelSpectrogramLoss(torch.nn.Module):
-    """Compute distance between mel spectrograms. Can be used
-    in a multi-scale way.
-
-    Parameters
-    ----------
-    n_mels : List[int]
-        Number of mels per STFT, by default [5, 10, 20, 40, 80, 160, 320],
-    window_lengths : List[int], optional
-        Length of each window of each STFT, by default [32, 64, 128, 256, 512, 1024, 2048]
-    loss_fn : typing.Callable, optional
-        How to compare each loss, by default nn.L1Loss()
-    clamp_eps : float, optional
-        Clamp on the log magnitude, below, by default 1e-5
-    mag_weight : float, optional
-        Weight of raw magnitude portion of loss, by default 0.0 (no ampliciation on mag part)
-    log_weight : float, optional
-        Weight of log magnitude portion of loss, by default 1.0
-    pow : float, optional
-        Power to raise magnitude to before taking log, by default 1.0
-    weight : float, optional
-        Weight of this loss, by default 1.0
-    match_stride : bool, optional
-        Whether to match the stride of convolutional layers, by default False
-
-    Implementation copied from: https://github.com/descriptinc/lyrebird-audiotools/blob/961786aa1a9d628cca0c0486e5885a457fe70c1a/audiotools/metrics/spectral.py
-    Additional code copied and modified from https://github.com/descriptinc/audiotools/blob/master/audiotools/core/audio_signal.py
-    """
-
     def __init__(
         self,
         sampling_rate: int,
-        n_mels: List[int] = [5, 10, 20, 40, 80, 160, 320],
-        window_lengths: List[int] = [32, 64, 128, 256, 512, 1024, 2048],
-        loss_fn: Callable = torch.nn.L1Loss(),
-        clamp_eps: float = 1e-5,
-        mag_weight: float = 0.0,
-        log_weight: float = 1.0,
-        pow: float = 1.0,
-        weight: float = 1.0,
-        match_stride: bool = False,
-        mel_fmin: List[float] = [0, 0, 0, 0, 0, 0, 0],
-        mel_fmax: List[float] = [None, None, None, None, None, None, None],
-        window_type: str = "hann",
+        n_mels: List[int] = [20, 64, 80, 128, 160, 256],
+        loss: Literal["l1","l2","smoothl1"] = "l1",
+        epsilon = 1e-8,
+        mag_weight = 0.0,
+        log_weight = 1.0,
+        adjustment_factor = 0.0,  # How much to adjust fmin/fmax dynamically per step
+        fmin = 50.,
+        fmax = None,
+        center = False,
+        **kwargs
     ):
         super().__init__()
         self.sampling_rate = sampling_rate
 
-        STFTParams = namedtuple(
-            "STFTParams",
-            ["window_length", "hop_length", "window_type", "match_stride"],
-        )
-
+        STFTParams = namedtuple("STFTParams",["window_length", "hop_length"])
+        window_lengths = [self.compute_window_length(mel, sampling_rate) for mel in n_mels]
         self.stft_params = [
-            STFTParams(
-                window_length=w,
-                hop_length=w // 4,
-                match_stride=match_stride,
-                window_type=window_type,
-            )
+            STFTParams(window_length=w,hop_length=sampling_rate // 100)
             for w in window_lengths
         ]
-        self.n_mels = n_mels
-        self.loss_fn = loss_fn
-        self.clamp_eps = clamp_eps
+        self.n_mels = sorted(n_mels)
+        if loss=="l1": self.loss_fn = torch.nn.L1Loss()
+        elif loss=="l2": self.loss_fn = torch.nn.MSELoss()
+        elif loss=="smoothl1": self.loss_fn = torch.nn.SmoothL1Loss()
+        self.loss = loss
+        self.epsilon = epsilon
         self.log_weight = log_weight
         self.mag_weight = mag_weight
-        self.weight = weight
-        self.mel_fmin = mel_fmin
-        self.mel_fmax = mel_fmax
-        self.pow = pow
+        self.center = center
+        if fmax is None: fmax = sampling_rate//2
+        self.fmax = fmax
+        self.fmin = fmin
+        self.mel_fmin = [fmin for _ in n_mels]
+        self.mel_fmax = [fmax for _ in n_mels]
+        self.adjustment_factor = adjustment_factor
+        self.frequency_buffer = int(sampling_rate * adjustment_factor)+1
+        self.window_lengths = window_lengths
+
+        for k,v in kwargs.items(): self.__setattr__(k,v)
+
+    def to_dict(self):
+        return dict(
+            sampling_rate=self.sampling_rate,
+            n_mels = self.n_mels,
+            loss = self.loss,
+            epsilon = self.epsilon,
+            mag_weight = self.mag_weight,
+            log_weight = self.log_weight,
+            adjustment_factor = self.adjustment_factor,
+            fmin = self.fmin,
+            fmax = self.fmax,
+            center = self.center,
+            mel_fmin=self.mel_fmin,
+            mel_fmax=self.mel_fmax,
+        )
+        
+    def show_freqs(self):
+        print(f"MultiScaleMelSpectrogramLoss:\n\tn_mels \twindow \tfmin \tfmax")
+        for i in range(len(self.mel_fmax)):
+            print(f"\t{self.n_mels[i]} \t{self.window_lengths[i]} \t{self.mel_fmin[i]:.0f} \t{self.mel_fmax[i]:.0f}")
 
     @staticmethod
-    @functools.lru_cache(None)
-    def get_window(
-        window_type,
-        window_length,
-    ):
-        return signal.get_window(window_type, window_length)
-
-    @staticmethod
-    @functools.lru_cache(None)
-    def get_mel_filters(sr, n_fft, n_mels, fmin, fmax):
-        return librosa_mel_fn(sr=sr, n_fft=n_fft, n_mels=n_mels, fmin=fmin, fmax=fmax)
-
-    def mel_spectrogram(
-        self,
-        wav,
-        n_mels,
-        fmin,
-        fmax,
-        window_length,
-        hop_length,
-        match_stride,
-        window_type,
-    ):
+    def compute_window_length(n_mels: int, sample_rate: int):
+        f_min = 0
+        f_max = sample_rate / 2
+        window_length_seconds = 8 * n_mels / (f_max - f_min)
+        window_length = int(window_length_seconds * sample_rate)
+        return 2**(window_length.bit_length()-1)
+    
+    def adjust_fmin_fmax(self, scale_losses: List[float]):
         """
-        Mirrors AudioSignal.mel_spectrogram used by BigVGAN-v2 training from: 
-        https://github.com/descriptinc/audiotools/blob/master/audiotools/core/audio_signal.py
+        Adjusts the fmin and fmax values dynamically based on the scale's performance.
         """
-        B, C, T = wav.shape
+        median_loss = np.nanmedian(scale_losses)
+        cumloss = np.cumsum(scale_losses)
+        cutoff_index = np.argmax(cumloss >= median_loss*len(scale_losses))
+        median_low = np.nanmedian(scale_losses[:cutoff_index])
+        median_high = np.nanmedian(scale_losses[cutoff_index:])
 
-        if match_stride:
-            assert (
-                hop_length == window_length // 4
-            ), "For match_stride, hop must equal n_fft // 4"
-            right_pad = np.ceil(T / hop_length) * hop_length - T
-            pad = (window_length - hop_length) // 2
-        else:
-            right_pad = 0
-            pad = 0
+        for i, scale_loss in enumerate(scale_losses):
+            # Calculate deviation from mean
+            threshold = median_high if i>=cutoff_index else median_low
+            deviation = (scale_loss - threshold)/(threshold + self.epsilon)
+            adjustment = min(abs(self.adjustment_factor * deviation),self.adjustment_factor)
 
-        wav = torch.nn.functional.pad(wav, (pad, pad + right_pad), mode="reflect")
-
-        window = self.get_window(window_type, window_length)
-        window = torch.from_numpy(window).to(wav.device).float()
-
-        stft = torch.stft(
-            wav.reshape(-1, T),
-            n_fft=window_length,
-            hop_length=hop_length,
-            window=window,
-            return_complex=True,
-            center=True,
-        )
-        _, nf, nt = stft.shape
-        stft = stft.reshape(B, C, nf, nt)
-        if match_stride:
-            """
-            Drop first two and last two frames, which are added, because of padding. Now num_frames * hop_length = num_samples.
-            """
-            stft = stft[..., 2:-2]
-        magnitude = torch.abs(stft)
-
-        nf = magnitude.shape[2]
-        mel_basis = self.get_mel_filters(
-            self.sampling_rate, 2 * (nf - 1), n_mels, fmin, fmax
-        )
-        mel_basis = torch.from_numpy(mel_basis).to(wav.device)
-        mel_spectrogram = magnitude.transpose(2, -1) @ mel_basis.T
-        mel_spectrogram = mel_spectrogram.transpose(-1, 2)
-
-        return mel_spectrogram
+            if i>=cutoff_index: # high frequency mels
+                self.mel_fmax[i] = min(self.mel_fmax[i] * (1 + adjustment), self.fmax) # increase fmax
+                if deviation > self.epsilon:  # Loss is above average, indicating poor performance
+                    self.mel_fmin[i] = min(self.mel_fmin[i] * (1 + adjustment), self.mel_fmax[i] - self.frequency_buffer) # increase fmin
+                elif deviation < -self.epsilon:  # Loss is below average, indicating good performance
+                    self.mel_fmin[i] = max(self.mel_fmin[i] * (1 - adjustment), self.fmin)  # Lower fmin
+            else: # low frequency mels
+                self.mel_fmin[i] = max(self.mel_fmin[i] * (1 - adjustment), self.fmin)  # Lower fmin
+                if deviation > self.epsilon:  # Loss is above average, indicating poor performance
+                    self.mel_fmax[i] = min(self.mel_fmax[i] * (1 + adjustment), self.fmax) # increase fmax
+                elif deviation < -self.epsilon:  # Loss is below average, indicating good performance
+                    self.mel_fmax[i] = max(self.mel_fmax[i] * (1 - adjustment), self.mel_fmin[i] + self.frequency_buffer) # lower fmax
 
     def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        """Computes mel loss between an estimate and a reference
-        signal.
+        """Compute multi-scale mel loss with dynamic weighting."""
+        
+        scale_losses = []
+        for (n_mels, fmin, fmax, s) in zip(self.n_mels, self.mel_fmin, self.mel_fmax, self.stft_params):
+            x_log_mel = mel_spectrogram_torch(x, s.window_length, n_mels, self.sampling_rate, s.hop_length, s.window_length, fmin, fmax, self.center)
+            y_log_mel = mel_spectrogram_torch(y, s.window_length, n_mels, self.sampling_rate, s.hop_length, s.window_length, fmin, fmax, self.center)
 
-        Parameters
-        ----------
-        x : torch.Tensor
-            Estimate signal
-        y : torch.Tensor
-            Reference signal
+            # Compute the per-scale loss
+            scale_loss = 0.
 
-        Returns
-        -------
-        torch.Tensor
-            Mel loss.
-        """
+            if self.log_weight>0:
+                log_loss = self.loss_fn(x_log_mel, y_log_mel)
+                scale_loss += self.log_weight * log_loss
 
-        loss = 0.0
-        for n_mels, fmin, fmax, s in zip(
-            self.n_mels, self.mel_fmin, self.mel_fmax, self.stft_params
-        ):
-            kwargs = {
-                "n_mels": n_mels,
-                "fmin": fmin,
-                "fmax": fmax,
-                "window_length": s.window_length,
-                "hop_length": s.hop_length,
-                "match_stride": s.match_stride,
-                "window_type": s.window_type,
-            }
+            if self.mag_weight>0:
+                x_mel = spectral_de_normalize_torch(x_log_mel)
+                y_mel = spectral_de_normalize_torch(y_log_mel)
+                mag_loss = self.loss_fn(x_mel, y_mel)
+                scale_loss += self.mag_weight * mag_loss
+            
+            # Combine losses for this scale
+            scale_losses.append(scale_loss)
 
-            x_mels = self.mel_spectrogram(x, **kwargs).nan_to_num(self.clamp_eps)
-            y_mels = self.mel_spectrogram(y, **kwargs).nan_to_num(self.clamp_eps)
-            x_logmels = torch.log10(x_mels.pow(self.pow)+self.clamp_eps).nan_to_num(self.clamp_eps)
-            y_logmels = torch.log10(y_mels.pow(self.pow)+self.clamp_eps).nan_to_num(self.clamp_eps)
+        total_loss = sum(scale_losses)
 
-            if self.log_weight!=0: loss += self.log_weight * self.loss_fn(x_logmels, y_logmels)
-            if self.mag_weight!=0: loss += self.mag_weight * self.loss_fn(x_mels, y_mels)
+        # Adjust fmin/fmax based on the losses
+        if self.adjustment_factor>0: self.adjust_fmin_fmax([loss.item() for loss in scale_losses])
 
-        return loss
+        return total_loss
+
     
 def feature_loss(fmap_r: List[List[torch.Tensor]], fmap_g: List[List[torch.Tensor]]):
     loss = 0

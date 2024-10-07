@@ -123,7 +123,6 @@ def train_model(hps: "utils.HParams"):
 def run(rank, n_gpus, hps, device):
     print(f"{__name__=}")
     global global_step, least_loss, loss_file, best_model_name, gradient_clip_value, MultiscaleMelLoss
-    MultiscaleMelLoss = MultiScaleMelSpectrogramLoss(hps.data.sampling_rate)
     global_step = 0
     loss_file = os.path.join(hps.model_dir,"losses.json")
     gradient_clip_value = np.log(hps.train.c_gp/hps.train.learning_rate) if hps.train.get("c_gp",0.)>0 else None
@@ -154,7 +153,7 @@ def run(rank, n_gpus, hps, device):
         logger = utils.get_logger(hps.model_dir)
         logger.info(hps)
         writer = SummaryWriter(log_dir=hps.model_dir)
-        writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
+        # writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
     if n_gpus>1:
         try:
             dist.init_process_group(backend="gloo", init_method="env://", world_size=n_gpus, rank=rank)
@@ -283,6 +282,17 @@ def run(rank, n_gpus, hps, device):
 
     scaler = GradScaler(enabled=hps.train.fp16_run)
 
+    if hps.train.get("use_multiscale"):
+        try:
+            msml_dict = g_kwargs["msml"]
+            MultiscaleMelLoss = MultiScaleMelSpectrogramLoss(**msml_dict)
+        except Exception as e:
+            logger.error(f"Failed to load MultiScaleMelSpectrogramLoss state: {e}")
+            MultiscaleMelLoss = MultiScaleMelSpectrogramLoss(
+                hps.data.sampling_rate,
+                adjustment_factor=min(1./len(train_loader),.05),
+                epsilon=hps.train.eps)
+
     try:
         balancer_state = g_kwargs["balancer"]
         logger.info(f"Using existing balancer: {balancer_state}")
@@ -339,7 +349,7 @@ def run(rank, n_gpus, hps, device):
                 scaler,
                 [train_loader, None],
                 logger,
-                [writer, writer_eval],
+                [writer, None],
                 cache,
                 [balancer_g, balancer_d]
             )
@@ -521,7 +531,7 @@ def train_and_evaluate(
             )
             with autocast(enabled=False):
                 y_hat_mel = mel_spectrogram_torch(
-                    y_hat.float().squeeze(1),
+                    y_hat,
                     hps.data.filter_length,
                     hps.data.n_mel_channels,
                     hps.data.sampling_rate,
@@ -530,7 +540,7 @@ def train_and_evaluate(
                     hps.data.mel_fmin,
                     hps.data.mel_fmax,
                 )
-            if hps.train.fp16_run: y_hat_mel = y_hat_mel.half()
+            # if hps.train.fp16_run: y_hat_mel = y_hat_mel.half()
             wave_orig = wave.clone()
             wave = commons.slice_segments(wave, ids_slice * hps.data.hop_length, hps.train.segment_size)  # slice
 
@@ -568,7 +578,9 @@ def train_and_evaluate(
                     n_fft=hps.data.filter_length,
                     hop_length=hps.data.hop_length,
                     win_length=hps.data.win_length,
-                    eps=hps.train.eps
+                    eps=hps.train.eps,
+                    fmin=hps.data.mel_fmin,
+                    fmax=hps.data.mel_fmax,
                 )
                 loss_gen, losses_gen = generator_loss(y_d_hat_g)
                 aux_loss = harmonic_loss + tefs_loss + tsi_loss
@@ -593,6 +605,7 @@ def train_and_evaluate(
             if hps.train.log_interval>0 and global_step % hps.train.log_interval == 0: #tensorboard logging
                 lr = optim_g.param_groups[0]["lr"]
                 logger.info(f"Train Epoch: {epoch} [{100.0 * (epoch-1) / hps.total_epoch:.2f}% complete]")
+                if hps.train.get("use_multiscale"): MultiscaleMelLoss.show_freqs()
 
                 # Amor For Tensorboard display
                 if loss_mel > 75:
@@ -660,7 +673,8 @@ def train_and_evaluate(
             hps.train.learning_rate,
             epoch,
             os.path.join(hps.model_dir, f"G_{saved_epoch}.pth"),
-            balancer=balancer_g.to_dict()
+            balancer=balancer_g.to_dict(),
+            msml=MultiscaleMelLoss.to_dict()
         )
         utils.save_checkpoint(
             net_d,

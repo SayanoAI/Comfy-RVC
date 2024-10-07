@@ -17,7 +17,7 @@ def median_pool1d(signal, kernel_size, dim=-1, stride=1):
     """
     # Ensure the input tensor is 3D (batch_size, F, T)
     if signal.dim() != 3:
-        raise ValueError("Input tensor must be 3D (batch_size, F, T)")
+        raise ValueError(f"Input tensor {signal.shape} must be 3D (batch_size, F, T)")
 
     # Adjust kernel size if larger than input dimension
     input_size = signal.size(dim)
@@ -71,10 +71,40 @@ def minmax_scale(tensor: torch.Tensor, eps=1e-8):
     tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min() + eps)
     return tensor
 
-def compute_correlation(t1: torch.Tensor, t2: torch.Tensor, eps=1e-8):
-    numerator = (t1 * t2).nan_to_num(0).sum(dim=-1)
-    denominator = torch.sqrt((t1 ** 2).sum(dim=-1) * (t2 ** 2).sum(dim=-1)+eps).nan_to_num(0)
-    return (numerator / denominator).nan_to_num(0)
+def compute_correlation(x: torch.Tensor, y: torch.Tensor, eps=1e-8):
+    """
+    Calculate the Pearson correlation coefficient between two batched vectors.
+    
+    Args:
+        x (torch.Tensor): A tensor of shape (batch_size, num_features).
+        y (torch.Tensor): A tensor of shape (batch_size, num_features).
+        
+    Returns:
+        torch.Tensor: A tensor of shape (batch_size,) containing the correlation coefficients.
+    """
+    # Ensure the inputs are float tensors
+    x = x.float()
+    y = y.float()
+    
+    # Calculate the mean of each batch
+    mean_x = torch.mean(x, dim=-1, keepdim=True)
+    mean_y = torch.mean(y, dim=-1, keepdim=True)
+    
+    # Subtract the mean from each element
+    x_centered = x - mean_x
+    y_centered = y - mean_y
+    
+    # Calculate the covariance
+    covariance = torch.sum(x_centered * y_centered, dim=-1)
+    
+    # Calculate the standard deviations
+    std_x = torch.sqrt(torch.sum(x_centered ** 2, dim=-1)+eps).nan_to_num(eps)
+    std_y = torch.sqrt(torch.sum(y_centered ** 2, dim=-1)+eps).nan_to_num(eps)
+    
+    # Calculate the correlation coefficient
+    correlation = covariance / (std_x * std_y + eps)
+    
+    return correlation.nan_to_num(eps)
 
 def init_weights(m, mean=0.0, std=0.01):
     classname = m.__class__.__name__
