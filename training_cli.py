@@ -699,8 +699,8 @@ def train_and_evaluate(
         balancer_g.on_epoch_end(.5 / (1 + np.exp(-10 * (epoch / hps.total_epoch - 0.16)))+.5) #sigmoid scaling of ema
         balancer_d.on_epoch_end(.5 / (1 + np.exp(-10 * (epoch / hps.total_epoch - 0.16)))+.5) #sigmoid scaling of ema
 
-        if total_loss<least_loss:
-            least_loss = total_loss
+        if loss_gen_all<least_loss:
+            least_loss = loss_gen_all
             logger.info(f"\t>>>[lowest loss]: {least_loss:.3f}<<<")
 
             if hps.save_best_model:

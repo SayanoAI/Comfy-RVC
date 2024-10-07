@@ -133,6 +133,30 @@ class LossBalancer:
         normalized_loss_dict = {keys[i]: normalized_losses[i] for i in range(len(keys))}
         
         return normalized_loss_dict
+    
+    def redistribute_weights(self, gradients: dict):
+        if self.use_pareto: pareto_weights = self.pareto_normalizer(self.historical_losses)
+        else: pareto_weights = {}
+
+        inverse_total_gradient = 1./(sum(gradients.values()) + self.epsilon)
+        total_initial_weight = sum(self.initial_weights.values())-len(gradients)
+        if total_initial_weight<0: return {k: 1. for k in gradients}
+
+        normalized_weights = {}
+
+        # First pass: sum of Pareto contributions (if any) and weight ratios
+        for k, g in gradients.items():
+
+            # Compute the weight ratio based on the gradient
+            w_ratio = g * inverse_total_gradient
+
+            # average weights
+            smoothed_ratio = pareto_weights.get(k, w_ratio)*.5 + w_ratio*.5
+
+            # Store the smoothed ratio for further calculations
+            normalized_weights[k] = 1. + total_initial_weight * (smoothed_ratio)
+
+        return normalized_weights
 
     def on_train_batch_start(self, losses: dict, input: Optional[torch.Tensor]=None):
         """
@@ -170,23 +194,16 @@ class LossBalancer:
                 # Use loss plateau detection with EMA
                 loss_slope = self.calculate_loss_slope(key, weighted_loss)
                 gradients[key] = max(loss_slope.item(), self.epsilon)
-            valid_losses[key] = weighted_loss.nan_to_num(self.epsilon)
+            valid_losses[key] = loss.nan_to_num(self.epsilon)
 
         if not valid_losses or not gradients: return torch.tensor(0.0)  # If all losses are skipped
 
         # update historical losses
-        historical_losses = self.update_historical_losses({k: loss.item() for k, loss in valid_losses.items()})
+        self.update_historical_losses({k: loss.item() for k, loss in valid_losses.items()})
 
         # Calculate loss weights based on gradient magnitudes
-        if len(valid_losses)>1:
-            if self.use_pareto: pareto_weights = self.pareto_normalizer(historical_losses)
-            else: pareto_weights = {}
-            inverse_total_gradient = 1./(sum(gradients.values()) + self.epsilon)
-            normalized_weights = {}
-            for k, w in gradients.items():
-                w_ratio = w * inverse_total_gradient
-                normalized_weights[k] = 1. + (w_ratio + pareto_weights.get(k, w_ratio)) / 2.
-        else: normalized_weights = {k: 1. for k in valid_losses.keys()}
+        if len(valid_losses)>1: normalized_weights = self.redistribute_weights(gradients)
+        else: normalized_weights = {k: self.initial_weights.get(k,1.) for k in valid_losses.keys()}
 
         # Update EMA weights
         normalized_weights = self.update_ema_weights(normalized_weights)
@@ -382,7 +399,6 @@ def combined_aux_loss(
     return harmonic_loss, tefs_loss, tsi_loss
 
 def gradient_norm_loss(original_audio: torch.Tensor, generated_audio: torch.Tensor, net_d: torch.nn.Module, eps=1e-8):
-    loss=0
     # Compute the gradient penalty
     # Randomly interpolate between real and generated data
     size = [1]*original_audio.ndim
@@ -391,22 +407,23 @@ def gradient_norm_loss(original_audio: torch.Tensor, generated_audio: torch.Tens
     interpolated = alpha * original_audio + (1 - alpha) * generated_audio
     interpolated.requires_grad_(True)
     # Get the discriminator output for the interpolated data
-    _, disc_interpolated_output, _, _ = net_d(original_audio, interpolated)
+    y_d_hat_r, y_d_hat_g, _, _ = net_d(original_audio, interpolated)
+    loss_disc, _ = discriminator_loss(y_d_hat_r, y_d_hat_g)
     # Compute gradients of discriminator output w.r.t. interpolated data
-    for output in disc_interpolated_output:
-        net_d.zero_grad()
-        gradients = torch.autograd.grad(
-            outputs=output,
-            inputs=interpolated,
-            grad_outputs=torch.ones_like(output, device=original_audio.device),
-            retain_graph=True,
-            allow_unused=True,
-            materialize_grads=True
-        )[0]
-        if gradients.ndim>1: grad_norm = gradients.view(gradients.size(0), -1).norm(2, dim=-1).mean()
-        else: grad_norm = gradients.norm(2)
-        loss += torch.log1p((grad_norm - 1) ** 2)
-    return loss/len(disc_interpolated_output)
+    net_d.zero_grad()
+    
+    gradients = torch.autograd.grad(
+        outputs=loss_disc,
+        inputs=interpolated,
+        retain_graph=True,
+        allow_unused=True,
+        materialize_grads=True
+    )[0]
+    
+    if gradients.ndim<=1: gradients = gradients.unsqueeze(0)
+    grad_norm = gradients.view(gradients.size(0), -1).square().sum(-1).sqrt()
+    loss = ((grad_norm - 1) ** 2).mean()
+    return loss
 
 # Adapted from https://github.com/NVIDIA/BigVGAN/blob/main/loss.py
 # LICENSE: https://github.com/NVIDIA/BigVGAN/blob/main/LICENSE
@@ -536,7 +553,7 @@ class MultiScaleMelSpectrogramLoss(torch.nn.Module):
             # Combine losses for this scale
             scale_losses.append(scale_loss)
 
-        total_loss = sum(scale_losses)
+        total_loss = sum(scale_losses)/len(scale_losses)
 
         # Adjust fmin/fmax based on the losses
         if self.adjustment_factor>0: self.adjust_fmin_fmax([loss.item() for loss in scale_losses])
@@ -556,16 +573,12 @@ def discriminator_loss(
         disc_generated_outputs: List[torch.Tensor]
         ):
     loss = 0
-    # r_losses = []
-    # g_losses = []
     disc_losses = []
     for dr, dg in zip(disc_real_outputs, disc_generated_outputs):
         r_loss = torch.mean((1 - dr) ** 2)
         g_loss = torch.mean(dg**2)
         L = r_loss + g_loss
         loss += L
-        # r_losses.append(r_loss.item())
-        # g_losses.append(g_loss.item())
         disc_losses.append(L)
     return loss, disc_losses
 

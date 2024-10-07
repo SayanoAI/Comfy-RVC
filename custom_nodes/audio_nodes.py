@@ -233,9 +233,9 @@ class ProcessAudioNode:
             "optional": {
                 "audio": (MultipleTypeProxy('AUDIO,VHS_AUDIO'),{"default": None}),
                 "dynamic_threshold_sample_size": ("INT",{"default": 4000, "min": 160, "max": 48000, "step": 160}),
-                "dynamic_threshold_multiplier": ("FLOAT",{"default": 2.}),
+                "dynamic_threshold_multiplier": ("FLOAT",{"default": 2., "min": 1.5, "step": .1}),
                 "dynamic_threshold_fill_method": (["median","interpolation"],{"default": "median"}),
-                "dynamic_threshold_kernel_size": ("INT",{"default": 5}),
+                "dynamic_threshold_kernel_size": ("INT",{"default": 5, "min": 3, "step": 2}),
                 "silence_threshold_db": ("INT",{"default": -50, "min": -120, "max": 0}),
                 "normalize_threshold_db": ("INT",{"default": -1, "min": -10, "max": 0})
             }
