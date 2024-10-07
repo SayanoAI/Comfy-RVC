@@ -1,13 +1,13 @@
 {
-  "last_node_id": 17,
-  "last_link_id": 30,
+  "last_node_id": 27,
+  "last_link_id": 57,
   "nodes": [
     {
       "id": 3,
       "type": "LoadPitchExtractionParams",
       "pos": [
-        -387,
-        130
+        -962.0740292968748,
+        39.00402600097682
       ],
       "size": {
         "0": 315,
@@ -44,8 +44,8 @@
       "id": 5,
       "type": "LoadHubertModel",
       "pos": [
-        -403,
-        402
+        -989.0740292968749,
+        321.0040260009767
       ],
       "size": {
         "0": 315,
@@ -76,36 +76,36 @@
       "id": 6,
       "type": "RVCNode",
       "pos": [
-        945.4000799560547,
-        -349.9999832153321
+        -388,
+        -373
       ],
-      "size": {
-        "0": 418.1999816894531,
-        "1": 166
-      },
+      "size": [
+        418.1999816894531,
+        166
+      ],
       "flags": {},
-      "order": 6,
+      "order": 10,
       "mode": 0,
       "inputs": [
         {
           "name": "audio",
           "type": "AUDIO,VHS_AUDIO",
-          "link": 12
+          "link": 56
         },
         {
           "name": "model",
           "type": "RVC_MODEL",
-          "link": 23
+          "link": 50
         },
         {
           "name": "hubert_model",
           "type": "HUBERT_MODEL",
-          "link": 24
+          "link": 51
         },
         {
           "name": "pitch_extraction_params",
           "type": "PITCH_EXTRACTION",
-          "link": 25
+          "link": 52
         }
       ],
       "outputs": [
@@ -125,15 +125,35 @@
       "widgets_values": [
         0,
         "flac",
-        true
+        true,
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
       ]
     },
     {
       "id": 9,
       "type": "RVC-Studio.LoadAudio",
       "pos": [
-        315.40007995605475,
-        -363.99998321533207
+        -1025.233936645508,
+        -375.3608336547855
       ],
       "size": {
         "0": 210,
@@ -161,15 +181,16 @@
         {
           "name": "audio",
           "type": "AUDIO",
-          "links": null,
-          "shape": 3
+          "links": [],
+          "shape": 3,
+          "slot_index": 2
         }
       ],
       "properties": {
         "Node name for S&R": "RVC-Studio.LoadAudio"
       },
       "widgets_values": [
-        "idol-tv.flac",
+        "You are my sunshine.flac",
         "None",
         "image"
       ]
@@ -178,15 +199,15 @@
       "id": 10,
       "type": "UVR5Node",
       "pos": [
-        573.4000799560546,
-        -355.9999832153321
+        -769,
+        -364
       ],
       "size": {
         "0": 315,
         "1": 150
       },
       "flags": {},
-      "order": 4,
+      "order": 5,
       "mode": 0,
       "inputs": [
         {
@@ -200,7 +221,8 @@
           "name": "primary_stem",
           "type": "VHS_AUDIO",
           "links": [
-            12
+            56,
+            57
           ],
           "slot_index": 0,
           "shape": 3
@@ -229,15 +251,15 @@
       "id": 11,
       "type": "MergeAudioNode",
       "pos": [
-        1431.4000799560547,
-        -346.9999832153321
+        76.3659833984373,
+        -363.3608504394535
       ],
-      "size": {
-        "0": 315,
-        "1": 166
-      },
+      "size": [
+        315,
+        166
+      ],
       "flags": {},
-      "order": 7,
+      "order": 11,
       "mode": 0,
       "inputs": [
         {
@@ -283,28 +305,155 @@
       "widgets_values": [
         "None",
         "median",
-        true
+        true,
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        },
+        {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
       ]
     },
     {
-      "id": 15,
+      "id": 17,
+      "type": "RVCProcessDatasetNode",
+      "pos": [
+        -594.440406835937,
+        51.19102186035135
+      ],
+      "size": {
+        "0": 337.6000061035156,
+        "1": 290
+      },
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "hubert_model",
+          "type": "HUBERT_MODEL",
+          "link": 28
+        },
+        {
+          "name": "pitch_extraction_params",
+          "type": "PITCH_EXTRACTION",
+          "link": 29
+        },
+        {
+          "name": "audio_processor",
+          "type": "AUDIO_PROCESSOR",
+          "link": 53
+        }
+      ],
+      "outputs": [
+        {
+          "name": "rvc_dataset_pipe",
+          "type": "RVC_DATASET_PIPE",
+          "links": [
+            41
+          ],
+          "slot_index": 0,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RVCProcessDatasetNode"
+      },
+      "widgets_values": [
+        "Sayano-pretrain",
+        "Sayano.zip",
+        "40k",
+        4,
+        3,
+        0.5,
+        0.99,
+        0.01,
+        "image"
+      ]
+    },
+    {
+      "id": 19,
+      "type": "RVCTrainParamsNode",
+      "pos": [
+        -578.8380483398437,
+        386.9360217895509
+      ],
+      "size": {
+        "0": 315,
+        "1": 394
+      },
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "rvc_training_params",
+          "type": "RVC_TRAINING_PARAMS",
+          "links": [
+            42
+          ],
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RVCTrainParamsNode"
+      },
+      "widgets_values": [
+        6,
+        1,
+        45,
+        1,
+        2,
+        1,
+        1,
+        1,
+        0,
+        45,
+        true,
+        true,
+        false,
+        true,
+        0.0001
+      ]
+    },
+    {
+      "id": 21,
       "type": "RVCTrainModelNode",
       "pos": [
-        374,
-        118
+        -215.44040683593724,
+        46.191021860351334
       ],
       "size": {
         "0": 506.4000244140625,
-        "1": 382
+        "1": 430
       },
       "flags": {},
-      "order": 5,
+      "order": 9,
       "mode": 0,
       "inputs": [
         {
           "name": "rvc_dataset_pipe",
           "type": "RVC_DATASET_PIPE",
-          "link": 30
+          "link": 41
+        },
+        {
+          "name": "rvc_training_params",
+          "type": "RVC_TRAINING_PARAMS",
+          "link": 42
         }
       ],
       "outputs": [
@@ -312,7 +461,7 @@
           "name": "model",
           "type": "RVC_MODEL",
           "links": [
-            23
+            50
           ],
           "slot_index": 0,
           "shape": 3
@@ -327,7 +476,7 @@
           "name": "hubert_model",
           "type": "HUBERT_MODEL",
           "links": [
-            24
+            51
           ],
           "slot_index": 2,
           "shape": 3
@@ -336,7 +485,7 @@
           "name": "pitch_extraction_params",
           "type": "PITCH_EXTRACTION",
           "links": [
-            25
+            52
           ],
           "slot_index": 3,
           "shape": 3
@@ -347,70 +496,133 @@
       },
       "widgets_values": [
         "0",
-        5,
-        100,
+        200,
         10,
-        "pretrained_v2/G_DMR-V1-32k-f0.pth",
-        "pretrained_v2/D_DMR-V1-32k-f0.pth",
+        "pretrained_v2/f0G40k.pth",
+        "pretrained_v2/f0D40k.pth",
+        true,
         true,
         false,
-        false,
         true,
         true,
-        true
+        true,
+        30,
+        1,
+        1
       ]
     },
     {
-      "id": 17,
-      "type": "RVCProcessDatasetNode",
+      "id": 25,
+      "type": "ProcessAudioNode",
       "pos": [
-        -8,
-        176
+        -961.8380483398437,
+        427.9360217895509
       ],
       "size": {
-        "0": 337.6000061035156,
-        "1": 270
+        "0": 315,
+        "1": 290
       },
       "flags": {},
-      "order": 3,
+      "order": 6,
       "mode": 0,
       "inputs": [
         {
-          "name": "hubert_model",
-          "type": "HUBERT_MODEL",
-          "link": 28
-        },
-        {
-          "name": "pitch_extraction_params",
-          "type": "PITCH_EXTRACTION",
-          "link": 29
+          "name": "audio",
+          "type": "AUDIO,VHS_AUDIO",
+          "link": 57
         }
       ],
       "outputs": [
         {
-          "name": "rvc_dataset_pipe",
-          "type": "RVC_DATASET_PIPE",
+          "name": "audio_processor",
+          "type": "AUDIO_PROCESSOR",
           "links": [
-            30
+            53
+          ],
+          "shape": 3
+        },
+        {
+          "name": "vhs_audio",
+          "type": "VHS_AUDIO",
+          "links": null,
+          "shape": 3,
+          "slot_index": 1
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            55
           ],
           "shape": 3,
-          "slot_index": 0
+          "slot_index": 2
         }
       ],
       "properties": {
-        "Node name for S&R": "RVCProcessDatasetNode"
+        "Node name for S&R": "ProcessAudioNode"
       },
       "widgets_values": [
-        "Comfy-Mae",
-        "Mae.zip",
-        "32k",
-        12,
-        3,
-        0.5,
-        0.9500000000000001,
-        0.01,
-        "image"
+        true,
+        true,
+        true,
+        4000,
+        2,
+        "median",
+        5,
+        -50,
+        -1
       ]
+    },
+    {
+      "id": 26,
+      "type": "PreviewAudio",
+      "pos": [
+        -133.79990234374995,
+        545.6000030517579
+      ],
+      "size": {
+        "0": 315,
+        "1": 76.0000228881836
+      },
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 55
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewAudio"
+      },
+      "widgets_values": [
+        null
+      ]
+    },
+    {
+      "id": 27,
+      "type": "Note",
+      "pos": [
+        -989,
+        -85
+      ],
+      "size": {
+        "0": 210,
+        "1": 58
+      },
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "properties": {
+        "text": ""
+      },
+      "widgets_values": [
+        "audio processor is experimental and can be skipped"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
     }
   ],
   "links": [
@@ -419,14 +631,6 @@
       9,
       1,
       10,
-      0,
-      "AUDIO,VHS_AUDIO"
-    ],
-    [
-      12,
-      10,
-      0,
-      6,
       0,
       "AUDIO,VHS_AUDIO"
     ],
@@ -447,30 +651,6 @@
       "AUDIO,VHS_AUDIO"
     ],
     [
-      23,
-      15,
-      0,
-      6,
-      1,
-      "RVC_MODEL"
-    ],
-    [
-      24,
-      15,
-      2,
-      6,
-      2,
-      "HUBERT_MODEL"
-    ],
-    [
-      25,
-      15,
-      3,
-      6,
-      3,
-      "PITCH_EXTRACTION"
-    ],
-    [
       28,
       5,
       0,
@@ -487,22 +667,86 @@
       "PITCH_EXTRACTION"
     ],
     [
-      30,
+      41,
       17,
       0,
-      15,
+      21,
       0,
       "RVC_DATASET_PIPE"
+    ],
+    [
+      42,
+      19,
+      0,
+      21,
+      1,
+      "RVC_TRAINING_PARAMS"
+    ],
+    [
+      50,
+      21,
+      0,
+      6,
+      1,
+      "RVC_MODEL"
+    ],
+    [
+      51,
+      21,
+      2,
+      6,
+      2,
+      "HUBERT_MODEL"
+    ],
+    [
+      52,
+      21,
+      3,
+      6,
+      3,
+      "PITCH_EXTRACTION"
+    ],
+    [
+      53,
+      25,
+      0,
+      17,
+      2,
+      "AUDIO_PROCESSOR"
+    ],
+    [
+      55,
+      25,
+      2,
+      26,
+      0,
+      "AUDIO"
+    ],
+    [
+      56,
+      10,
+      0,
+      6,
+      0,
+      "AUDIO,VHS_AUDIO"
+    ],
+    [
+      57,
+      10,
+      0,
+      25,
+      0,
+      "AUDIO,VHS_AUDIO"
     ]
   ],
   "groups": [
     {
       "title": "Model Trainer",
       "bounding": [
-        -413,
-        45,
-        1303,
-        466
+        -999,
+        -35,
+        1300,
+        826
       ],
       "color": "#b06634",
       "font_size": 24
@@ -510,8 +754,8 @@
     {
       "title": "Basic Voice Changer",
       "bounding": [
-        305,
-        -438,
+        -1036,
+        -450,
         1451,
         267
       ],
@@ -522,10 +766,10 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.6830134553650705,
+      "scale": 1.2100000000000002,
       "offset": [
-        544.5635228085466,
-        563.3345057885277
+        935.0775202588511,
+        160.03046112675403
       ]
     }
   },
