@@ -21,16 +21,17 @@ def load_hubert(model_path: str, config):
         if model_path.endswith(".safetensors"):
             return HubertModelWithFinalProj.from_safetensors(model_path, device=config.device)
         else:
-            from fairseq import checkpoint_utils
-            models, _, _ = checkpoint_utils.load_model_ensemble_and_task([model_path],suffix="",)
-            hubert_model = models[0]
-            hubert_model = hubert_model.to(config.device)
-            if config.is_half:
-                hubert_model = hubert_model.half()
-            else:
-                hubert_model = hubert_model.float()
-            hubert_model.eval()
-            return hubert_model
+            raise NotImplementedError("Please use content-vec-best.safetensors!")
+            # from fairseq import checkpoint_utils
+            # models, _, _ = checkpoint_utils.load_model_ensemble_and_task([model_path],suffix="",)
+            # hubert_model = models[0]
+            # hubert_model = hubert_model.to(config.device)
+            # if config.is_half:
+            #     hubert_model = hubert_model.half()
+            # else:
+            #     hubert_model = hubert_model.float()
+            # hubert_model.eval()
+            # return hubert_model
     except Exception as e:
         print(e)
         return None

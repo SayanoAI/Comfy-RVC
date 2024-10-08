@@ -3,7 +3,33 @@ name = "comfy-rvc"
 description = ""
 version = "1.0.0"
 license = "{file = \"LICENSE\"}"
-dependencies = ["librosa~=0.10.2", "numpy", "fairseq==0.12.2", "faiss-cpu", "ffmpeg-python", "tqdm", "audioread", "audio-separator[gpu]", "onnxruntime-gpu", "ffmpy", "samplerate", "pyaudio", "spacy", "monotonic_align", "textacy", "pytube", "spacytextblob"]
+dependencies = [
+    "librosa~=0.10.2",
+    "numpy",
+    "faiss-cpu==1.7.4",
+    "ffmpeg-python",
+    "tqdm",
+    "audioread",
+    "audio-separator[gpu]",
+    "onnxruntime-gpu",
+    "ffmpy",
+    "samplerate",
+    "pyaudio",
+    "spacy",
+    "monotonic_align",
+    "textacy",
+    "pytube",
+    "spacytextblob",
+    "accelerate",
+    "yt-dlp",
+    "deep-translator",
+    "openmim",
+    "opencv-python",
+    "soundfile",
+    "diffusers",
+    "scikit-learn",
+    "torchcrepe"
+    ]
 
 [project.urls]
 Repository = "https://github.com/SayanoAI/Comfy-RVC"
