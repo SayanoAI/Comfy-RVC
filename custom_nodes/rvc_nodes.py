@@ -1,10 +1,11 @@
 import json
 import multiprocessing
 import os
-import shutil
 
 import numpy as np
 import torch
+
+from .audio_nodes import to_audio_dict
 
 from . import BASE_DIR
 
@@ -178,7 +179,7 @@ class RVCNode:
     
     OUTPUT_NODE = True
 
-    RETURN_TYPES = ("VHS_AUDIO",)
+    RETURN_TYPES = ("VHS_AUDIO", "AUDIO")
 
     FUNCTION = "convert"
 
@@ -189,23 +190,20 @@ class RVCNode:
         input_audio = get_audio(audio)
         voice_model = model()
         feature_model = hubert_model()
-        widgetId = get_hash(feature_model, f0_up_key, audio_to_bytes(*input_audio), *voice_model.items(), *pitch_extraction_params.items())
+        widgetId = get_hash(feature_model.__class__.__name__, voice_model.get("model_name"), str(voice_model.get("file_index")), f0_up_key, audio_to_bytes(*input_audio), *pitch_extraction_params.items())
         cache_name = os.path.join(BASE_CACHE_DIR,"rvc",f"{widgetId}.{format}")
+        audio_name = os.path.basename(cache_name)
+        tempdir = os.path.join(temp_path,"preview")
+        os.makedirs(tempdir, exist_ok=True)
+        preview_file = os.path.join(tempdir,audio_name)
 
         if use_cache and os.path.isfile(cache_name): output_audio = load_input_audio(cache_name)
         else:
             output_audio = vc_single(hubert_model=feature_model,input_audio=input_audio,f0_up_key=f0_up_key,**voice_model,**pitch_extraction_params)
-            
-            if use_cache:
-                print(save_input_audio(cache_name, output_audio))
-                if os.path.isfile(cache_name): output_audio = load_input_audio(cache_name)
+            print(save_input_audio(preview_file, output_audio))
+            if use_cache: print(save_input_audio(cache_name, output_audio))
         
-        tempdir = os.path.join(temp_path,"preview")
-        os.makedirs(tempdir, exist_ok=True)
-        audio_name = os.path.basename(cache_name)
-        preview_file = os.path.join(tempdir,audio_name)
-        if not os.path.isfile(preview_file): shutil.copyfile(cache_name,preview_file)
-        return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda:audio_to_bytes(*output_audio),)}
+        return {"ui": {"preview": [{"filename": audio_name, "type": "temp", "subfolder": "preview", "widgetId": widgetId}]}, "result": (lambda:audio_to_bytes(*output_audio), to_audio_dict(*output_audio))}
     
 class RVCProcessDatasetNode:
     
