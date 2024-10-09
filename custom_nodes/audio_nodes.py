@@ -16,7 +16,7 @@ temp_path = folder_paths.get_temp_directory()
 
 def to_audio_dict(audio: "np.ndarray", sr: int):
     audio = np.atleast_2d(audio)
-    waveform = torch.from_numpy(audio.reshape((-1,audio.shape[0]))).transpose(0,1).unsqueeze(0)
+    waveform = torch.from_numpy(audio.reshape((-1,audio.shape[0]))).unsqueeze(0)
     return dict(waveform=waveform,sample_rate=sr)
 
 class LoadAudio:

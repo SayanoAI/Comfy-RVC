@@ -116,7 +116,8 @@ def get_audio(audio):
     if hasattr(audio,"__call__"): #VHS_AUDIO is a function
         audio = audio()
     if isinstance(audio,Mapping): #comfyui AUDIO
-        return audio["waveform"].squeeze(0).transpose(0,1).numpy(), audio["sample_rate"]
+        waveform = audio["waveform"].squeeze(0).transpose(0,1).numpy()
+        return waveform, audio["sample_rate"]
     elif type(audio)==bytes: return bytes_to_audio(audio)
     else:
         print(f"{audio} is neither VHS_AUDIO or AUDIO format...")
@@ -164,7 +165,7 @@ def remix_audio(input_audio,target_sr=None,norm=False,to_int16=False,resample=Fa
 def load_input_audio(fname,sr=None,**kwargs):
     if sr is None: sr=44100
     audio, sr = load_audio(fname, sr, **kwargs)
-    print(f"loading sound {fname=} {audio.ndim=} {audio.max()=} {audio.min()=} {audio.dtype=} {sr=}")
+    print(f"loading sound {fname=} {audio.shape=} {audio.max()=} {audio.min()=} {audio.dtype=} {sr=}")
     return audio, sr
    
 def save_input_audio(fname,input_audio,sr=None,to_int16=False,to_stereo=False,max_volume=.99):
@@ -179,7 +180,6 @@ def save_input_audio(fname,input_audio,sr=None,to_int16=False,to_stereo=False,ma
     
     try:
         if audio.ndim>1 and audio.shape[0]<audio.shape[1]: audio=audio.T # soundfile expects data in frames x channels
-        print(f"{audio.shape=}")
         sf.write(fname, audio.astype("int16" if np.abs(audio).max()>1 else "float32"), sr if sr else input_audio[1])
         return f"File saved to ${fname}"
     except Exception as e:
@@ -198,7 +198,6 @@ def audio_to_bytes(audio,sr,target_sr=None,to_int16=False,to_stereo=False,format
         if to_stereo and audio.ndim<2: audio=np.stack([audio,audio],axis=-1)
 
         if audio.ndim>1 and audio.shape[0]<audio.shape[1]: audio=audio.T # soundfile expects data in frames x channels
-        print(f"{audio.shape=}")
         samplerate = sr if target_sr is None else target_sr
         sf.write(bytes_io, audio.astype("int16" if np.abs(audio).max()>1 else "float32"), samplerate=samplerate,format=format)
         bytes_io.seek(0)
@@ -207,9 +206,7 @@ def audio_to_bytes(audio,sr,target_sr=None,to_int16=False,to_stereo=False,format
 def bytes_to_audio(data: bytes,**kwargs):
     with io.BytesIO(data) as bytes_io:
         audio, sr = sf.read(bytes_io,**kwargs)
-        if audio.ndim>1:
-            if audio.shape[-1]<audio.shape[0]: # is channel-last format
-                audio = audio.T # transpose to channels-first
+        if audio.ndim>1 and audio.shape[1]<audio.shape[0]: audio = audio.T # transpose to channels x frames
         return audio, sr
 
 def bytes2audio(data: str):
