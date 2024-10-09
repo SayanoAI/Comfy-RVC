@@ -1,4 +1,5 @@
 import math
+import numpy as np
 import torch
 from torch.nn import functional as F
 
@@ -273,3 +274,28 @@ def clip_grad_value_(parameters, clip_value, norm_type=2, batch_size=1):
 def serialize_tensor(tensor):
     if hasattr(tensor,"item"): return tensor.item()
     else: return float(f"{float(tensor):.3f}")
+
+def sigmoid_value(step, total_steps=100, start_value=0, end_value=1, midpoint=.5):
+    """
+    Calculate the scaled sigmoid function.
+
+    Parameters:
+    step (int): The current training epoch.
+    total_steps (int): The total number of training epochs.
+    start_value (float): The starting value of the clipping range.
+    end_value (float): The ending value of the clipping range.
+    midpoint (float): Percentage where sigmoid function is 50% between start and end value
+    steepness (int): How fast the values change per step
+
+    Returns:
+    float: The calculated scaled sigmoid value.
+    """
+    # Sigmoid function parameters
+    
+
+    # Calculate the sigmoid value
+    sigmoid_value = 1 / (1 + np.power(10,-np.log10(total_steps) * (step / total_steps - midpoint)))
+
+    # Scale the sigmoid output to the desired range
+    value = start_value + (end_value - start_value) * sigmoid_value
+    return value
